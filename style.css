@@ -135,6 +135,16 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   transition: background 0.15s, border-color 0.15s;
 }
 .cal-day:hover { border-color: var(--primary); }
+.cal-day-sat {
+  background: #e3f4fb;
+  border-color: #bfe6f5;
+  color: #0f6d94;
+}
+.cal-day-holiday {
+  background: #fdeaf1;
+  border-color: #f6c6dc;
+  color: #c23572;
+}
 .cal-day.selected {
   background: var(--primary);
   border-color: var(--primary);

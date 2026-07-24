@@ -222,6 +222,91 @@ function updateUnitAmount() {
 }
 
 /* ============================================================
+ * 日本の祝日判定（固定日・ハッピーマンデー・春分秋分・振替休日・国民の休日）
+ * ============================================================ */
+const holidayCache = new Map(); // year -> Map('YYYY-MM-DD' -> name)
+
+function nthMondayDate(year, month, nth) {
+  const first = new Date(year, month - 1, 1);
+  const firstMonday = 1 + ((8 - first.getDay()) % 7);
+  return firstMonday + (nth - 1) * 7;
+}
+
+function computeJapaneseHolidays(year) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const key = (m, d) => `${year}-${pad(m)}-${pad(d)}`;
+  const holidays = new Map();
+  const add = (m, d, name) => holidays.set(key(m, d), name);
+
+  add(1, 1, '元日');
+  add(2, 11, '建国記念の日');
+  if (year >= 2020) add(2, 23, '天皇誕生日');
+  add(4, 29, '昭和の日');
+  add(5, 3, '憲法記念日');
+  add(5, 4, 'みどりの日');
+  add(5, 5, 'こどもの日');
+  if (year >= 2016) add(8, 11, '山の日');
+  add(11, 3, '文化の日');
+  add(11, 23, '勤労感謝の日');
+
+  add(1, nthMondayDate(year, 1, 2), '成人の日');
+  add(7, nthMondayDate(year, 7, 3), '海の日');
+  add(9, nthMondayDate(year, 9, 3), '敬老の日');
+  add(10, nthMondayDate(year, 10, 2), year >= 2020 ? 'スポーツの日' : '体育の日');
+
+  const shunbun = Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  add(3, shunbun, '春分の日');
+  const shuubun = Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  add(9, shuubun, '秋分の日');
+
+  // 国民の休日: 前後を祝日に挟まれた(日曜以外の)平日
+  const toDate = (dstr) => {
+    const [y, m, d] = dstr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const addDays = (date, n) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + n);
+    return d;
+  };
+  const fmt = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+  [...holidays.keys()].forEach((dstr) => {
+    const d = toDate(dstr);
+    const next = addDays(d, 2);
+    const between = addDays(d, 1);
+    if (holidays.has(fmt(next)) && !holidays.has(fmt(between)) && between.getDay() !== 0) {
+      holidays.set(fmt(between), '国民の休日');
+    }
+  });
+
+  // 振替休日: 祝日が日曜の場合、直後の祝日でない日を振替休日にする
+  [...holidays.entries()]
+    .filter(([dstr]) => toDate(dstr).getDay() === 0)
+    .forEach(([dstr]) => {
+      let cursor = addDays(toDate(dstr), 1);
+      while (holidays.has(fmt(cursor))) {
+        cursor = addDays(cursor, 1);
+      }
+      holidays.set(fmt(cursor), '振替休日');
+    });
+
+  return holidays;
+}
+
+function getHolidaysForYear(year) {
+  if (!holidayCache.has(year)) {
+    holidayCache.set(year, computeJapaneseHolidays(year));
+  }
+  return holidayCache.get(year);
+}
+
+function getHolidayName(dateStr) {
+  const year = Number(dateStr.slice(0, 4));
+  return getHolidaysForYear(year).get(dateStr);
+}
+
+/* ============================================================
  * カレンダー（参加日の複数選択）
  * ============================================================ */
 function initCalendar() {
@@ -266,7 +351,14 @@ function renderCalendar() {
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const selected = selectedDates.has(dateStr);
-    html += `<button type="button" class="cal-day${selected ? ' selected' : ''}" data-date="${dateStr}">${d}</button>`;
+    const weekday = new Date(calYear, calMonth - 1, d).getDay();
+    const holidayName = getHolidayName(dateStr);
+    const classes = ['cal-day'];
+    if (weekday === 6) classes.push('cal-day-sat');
+    if (weekday === 0 || holidayName) classes.push('cal-day-holiday');
+    if (selected) classes.push('selected');
+    const title = holidayName ? ` title="${escapeHtml(holidayName)}"` : '';
+    html += `<button type="button" class="${classes.join(' ')}" data-date="${dateStr}"${title}>${d}</button>`;
   }
   grid.innerHTML = html;
 
