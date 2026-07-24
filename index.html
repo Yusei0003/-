@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交通費・謝礼金 取りまとめ | KESEN LARUS BASKETBALL CLUB</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="app-header">
+  <h1>交通費・謝礼金 取りまとめ</h1>
+  <p class="subtitle">KESEN LARUS BASKETBALL CLUB 交通費等及び謝礼金支給規程 対応</p>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="entry">入力</button>
+  <button class="tab-btn" data-tab="list">一覧</button>
+  <button class="tab-btn" data-tab="summary">月次集計</button>
+</nav>
+
+<main>
+  <!-- ============ 入力タブ ============ -->
+  <section id="panel-entry" class="tab-panel active">
+    <form id="entry-form">
+      <div class="form-grid">
+        <label class="field-group">
+          日付
+          <input type="date" id="f-date" required>
+        </label>
+
+        <label class="field-group">
+          氏名
+          <input type="text" id="f-name" list="name-list" placeholder="氏名を入力" required>
+          <datalist id="name-list"></datalist>
+        </label>
+
+        <label class="field-group">
+          区分
+          <select id="f-category">
+            <option value="practice">通常練習（スタッフ）</option>
+            <option value="weekend">土日祝日活動（スタッフ）</option>
+            <option value="referee">帯同審判（外部依頼者）</option>
+            <option value="commissioner">コミッショナー（外部依頼者）</option>
+          </select>
+        </label>
+
+        <label class="field-group" id="group-role">
+          役割
+          <select id="f-role">
+            <option value="main_coach">メインコーチ（1,000円）</option>
+            <option value="staff">スタッフ（500円）</option>
+          </select>
+        </label>
+
+        <label class="field-group" id="group-gametype">
+          試合種別
+          <select id="f-gametype">
+            <option value="practice_game">練習試合</option>
+            <option value="official_game">公式戦（2,500円/試合）</option>
+          </select>
+        </label>
+
+        <label class="field-group" id="group-location">
+          活動場所
+          <select id="f-location">
+            <option value="in">気仙管内</option>
+            <option value="out">気仙管外</option>
+          </select>
+        </label>
+
+        <label class="field-group" id="group-duration">
+          拘束時間
+          <select id="f-duration">
+            <option value="half">半日（4h以内）</option>
+            <option value="full">1日（4h超）</option>
+          </select>
+        </label>
+
+        <label class="field-group checkbox-field" id="group-club-affiliated">
+          <input type="checkbox" id="f-club-affiliated">
+          クラブ関係者・保護者が担当（適用除外）
+        </label>
+
+        <label class="field-group">
+          実施状況
+          <select id="f-status">
+            <option value="done">実施</option>
+            <option value="cancel_before">中止（開始前）</option>
+            <option value="cancel_after">中止（現地到着後）</option>
+          </select>
+        </label>
+
+        <label class="field-group checkbox-field">
+          <input type="checkbox" id="f-meal">
+          弁当支給あり（代替措置）
+        </label>
+
+        <div class="field-group suggested-box">
+          規程による目安額
+          <div class="suggested-amount" id="f-suggested">¥0</div>
+          <div class="suggested-note" id="f-suggested-note"></div>
+          <button type="button" id="f-use-suggested" class="btn-secondary">目安額を反映</button>
+        </div>
+
+        <label class="field-group">
+          支給額（確定）
+          <input type="number" id="f-amount" step="1" min="0" required>
+        </label>
+
+        <label class="field-group full-width">
+          備考
+          <input type="text" id="f-note" placeholder="特例事項・承認内容など">
+        </label>
+      </div>
+
+      <button type="submit" class="btn-primary">登録する</button>
+    </form>
+  </section>
+
+  <!-- ============ 一覧タブ ============ -->
+  <section id="panel-list" class="tab-panel">
+    <div class="filter-bar">
+      <label>対象月
+        <select id="list-month-filter"><option value="">すべての月</option></select>
+      </label>
+      <label>氏名で絞り込み
+        <input type="text" id="list-name-filter" placeholder="氏名">
+      </label>
+      <div class="filter-stats">
+        <span id="list-count">0 件</span>
+        <span>合計 <strong id="list-total">¥0</strong></span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="sheet-table">
+        <thead>
+          <tr>
+            <th>日付</th><th>氏名</th><th>区分</th><th>内容</th><th>支給額</th><th>備考</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="list-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 月次集計タブ ============ -->
+  <section id="panel-summary" class="tab-panel">
+    <div class="filter-bar">
+      <label>対象月
+        <select id="summary-month"><option value="">対象月を選択</option></select>
+      </label>
+      <div class="filter-stats">
+        <span id="summary-count">0 名</span>
+        <span>合計 <strong id="summary-total">¥0</strong></span>
+        <span>支払予定日 <strong id="summary-paydate">-</strong></span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="sheet-table">
+        <thead><tr><th>氏名</th><th>月間支給額</th></tr></thead>
+        <tbody id="summary-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
