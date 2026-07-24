@@ -185,6 +185,21 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   border-color: #f6c6dc;
   color: #c23572;
 }
+.cal-day-registered {
+  position: relative;
+  background: #eef1f3;
+  border-color: #dbe1e5;
+  color: #97a3ac;
+  cursor: not-allowed;
+}
+.cal-day-registered:hover { transform: none; border-color: #dbe1e5; }
+.cal-day-badge {
+  position: absolute;
+  bottom: 3px;
+  right: 5px;
+  font-size: 0.45rem;
+  color: var(--primary-dark);
+}
 .cal-day.selected {
   background: linear-gradient(135deg, #0ea5e9, #0369a1);
   border-color: var(--primary-dark);

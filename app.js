@@ -160,6 +160,8 @@ function initForm() {
   nameSel.addEventListener('change', () => {
     applyDefaultRole();
     updateUnitAmount();
+    pruneSelectedDatesForName();
+    renderCalendar();
   });
   categorySel.addEventListener('change', () => {
     updateConditionalFields();
@@ -188,7 +190,11 @@ function initForm() {
     const note = document.getElementById('f-note').value;
     const amount = calcUnitAmount(category, { role, location, duration });
 
-    const dates = [...selectedDates].sort();
+    const dates = [...selectedDates].sort().filter((date) => !isDateRegisteredForName(name, date));
+    if (dates.length === 0) {
+      alert('選択した日はすでに登録済みのため、登録できませんでした');
+      return;
+    }
     dates.forEach((date) => {
       addRecord({ date, name, category, role, location, duration, amount, note });
     });
@@ -204,6 +210,17 @@ function initForm() {
 function applyDefaultRole() {
   const name = document.getElementById('f-name').value;
   document.getElementById('f-role').value = DEFAULT_ROLE[name] ?? 'staff';
+}
+
+function isDateRegisteredForName(name, date) {
+  return records.some((r) => r.name === name && r.date === date);
+}
+
+function pruneSelectedDatesForName() {
+  const name = document.getElementById('f-name').value;
+  [...selectedDates].forEach((date) => {
+    if (isDateRegisteredForName(name, date)) selectedDates.delete(date);
+  });
 }
 
 function updateConditionalFields() {
@@ -349,21 +366,40 @@ function renderCalendar() {
   for (let i = 0; i < firstWeekday; i++) {
     html += '<span class="cal-day cal-day-empty"></span>';
   }
+  const name = document.getElementById('f-name').value;
+
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const selected = selectedDates.has(dateStr);
     const weekday = new Date(calYear, calMonth - 1, d).getDay();
     const holidayName = getHolidayName(dateStr);
+    const registeredRecords = records.filter((r) => r.name === name && r.date === dateStr);
+    const isRegistered = registeredRecords.length > 0;
+
     const classes = ['cal-day'];
     if (weekday === 6) classes.push('cal-day-sat');
     if (weekday === 0 || holidayName) classes.push('cal-day-holiday');
+    if (isRegistered) classes.push('cal-day-registered');
     if (selected) classes.push('selected');
-    const title = holidayName ? ` title="${escapeHtml(holidayName)}"` : '';
-    html += `<button type="button" class="${classes.join(' ')}" data-date="${dateStr}"${title}>${d}</button>`;
+
+    const titleParts = [];
+    if (holidayName) titleParts.push(holidayName);
+    if (isRegistered) {
+      titleParts.push(
+        '登録済み: ' +
+          registeredRecords
+            .map((r) => `${categoryLabel(r.category)}${describeEntry(r) ? '・' + describeEntry(r) : ''}（${yen(r.amount)}）`)
+            .join(' / ')
+      );
+    }
+    const title = titleParts.length ? ` title="${escapeHtml(titleParts.join(' / '))}"` : '';
+    const disabled = isRegistered ? ' disabled' : '';
+    const badge = isRegistered ? '<span class="cal-day-badge">●</span>' : '';
+    html += `<button type="button" class="${classes.join(' ')}" data-date="${dateStr}"${title}${disabled}>${d}${badge}</button>`;
   }
   grid.innerHTML = html;
 
-  grid.querySelectorAll('.cal-day:not(.cal-day-empty)').forEach((btn) => {
+  grid.querySelectorAll('.cal-day:not(.cal-day-empty):not(:disabled)').forEach((btn) => {
     btn.addEventListener('click', () => {
       const date = btn.dataset.date;
       if (selectedDates.has(date)) {
