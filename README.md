@@ -30,3 +30,7 @@ KESEN LARUS BASKETBALL CLUB の「交通費等及び謝礼金支給規程」第3
 
 - データ（出席記録・連絡先設定）はブラウザ（端末）ごとのlocalStorageに保存されます。他の端末とは共有されません。
 - 個別に金額調整が必要な場合は、一覧タブの支給額欄を直接編集してください（領収書のPDFにもその金額が反映されます）。
+
+## キャッシュ対策（アセットのバージョニング）
+
+`.github/workflows/version-assets.yml` により、このブランチへのpushのたびにGitHub Actionsが自動的に `index.html` 内の `app.js` / `style.css` / `xlsx-writer.js` の読み込みURLへ `?v=YYYYMMDDHHMMSS`（UTC・push時刻）を付与するコミットを追加します。これにより、コード更新後にブラウザの古いキャッシュが表示され続ける問題を軽減します。GitHub Pagesの設定変更は不要です（Deploy from a branch のまま動作します）。
