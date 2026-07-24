@@ -27,6 +27,17 @@ const LOCATION_LABEL = { in: '気仙管内', out: '気仙管外' };
 const DURATION_LABEL = { half: '半日（4h以内）', full: '1日（4h超）' };
 
 const STORAGE_KEY = 'larus_expense_records_v3';
+const CONTACTS_KEY = 'larus_receipt_contacts_v1';
+
+/* 交通費受領書の明細行（KESEN LARUS所定様式の並び順） */
+const RECEIPT_ROWS = [
+  { label: '練習(メイン)', unit: 1000, match: (r) => r.category === 'practice' && r.role === 'main_coach' },
+  { label: '練習(サブ)', unit: 500, match: (r) => r.category === 'practice' && r.role !== 'main_coach' },
+  { label: '土日(半日・内)', unit: 1000, match: (r) => r.category === 'weekend' && r.location === 'in' && r.duration === 'half' },
+  { label: '土日(全日・内)', unit: 1500, match: (r) => r.category === 'weekend' && r.location === 'in' && r.duration === 'full' },
+  { label: '土日(半日・外)', unit: 2000, match: (r) => r.category === 'weekend' && r.location === 'out' && r.duration === 'half' },
+  { label: '土日(全日・外)', unit: 3000, match: (r) => r.category === 'weekend' && r.location === 'out' && r.duration === 'full' },
+];
 
 /* ============================================================
  * 金額計算
@@ -75,6 +86,20 @@ function updateRecord(id, patch) {
 function deleteRecord(id) {
   records = records.filter((r) => r.id !== id);
   saveRecords(records);
+}
+
+function loadContacts() {
+  try {
+    const raw = localStorage.getItem(CONTACTS_KEY);
+    return raw ? JSON.parse(raw) : { address: '', phones: {} };
+  } catch (e) {
+    console.error('failed to load contacts', e);
+    return { address: '', phones: {} };
+  }
+}
+
+function saveContacts(contacts) {
+  localStorage.setItem(CONTACTS_KEY, JSON.stringify(contacts));
 }
 
 function yen(n) {
@@ -338,6 +363,144 @@ function nextPaymentDate(monthKeyStr) {
 
 function initSummary() {
   document.getElementById('summary-month').addEventListener('change', renderSummary);
+  initContactSettings();
+  document.getElementById('btn-receipt-pdf').addEventListener('click', handleReceiptPdfClick);
+}
+
+/* ============================================================
+ * 連絡先設定（この端末のlocalStorageにのみ保存。リポジトリには含めない）
+ * ============================================================ */
+function initContactSettings() {
+  const contacts = loadContacts();
+
+  const addressInput = document.getElementById('c-address');
+  addressInput.value = contacts.address || '';
+  addressInput.addEventListener('input', () => {
+    const c = loadContacts();
+    c.address = addressInput.value;
+    saveContacts(c);
+  });
+
+  const list = document.getElementById('contact-phone-list');
+  list.innerHTML = STAFF_NAMES.map(
+    (name, i) => `
+    <label class="field-group">
+      ${escapeHtml(name)} の電話番号
+      <input type="text" id="c-phone-${i}" data-name="${escapeHtml(name)}" placeholder="080-0000-0000">
+    </label>`
+  ).join('');
+  list.querySelectorAll('input').forEach((input) => {
+    const name = input.dataset.name;
+    input.value = contacts.phones[name] || '';
+    input.addEventListener('input', () => {
+      const c = loadContacts();
+      c.phones[name] = input.value;
+      saveContacts(c);
+    });
+  });
+}
+
+/* ============================================================
+ * 領収書（交通費受領書）PDF出力
+ * ============================================================ */
+function formatDisplayName(name) {
+  return name.length === 4 ? name.slice(0, 2) + '　' + name.slice(2) : name;
+}
+
+function formatEraMonth(monthKeyStr) {
+  const [y, m] = monthKeyStr.split('-').map(Number);
+  const reiwaYear = y - 2018;
+  return `R${reiwaYear}.${m}`;
+}
+
+function numFmt(n) {
+  return Number(n || 0).toLocaleString('ja-JP');
+}
+
+function buildReceiptData(name, month) {
+  const monthRecords = records.filter((r) => r.name === name && monthKey(r.date) === month);
+  const rows = RECEIPT_ROWS.map((rowDef) => {
+    const matches = monthRecords.filter(rowDef.match);
+    const count = matches.length;
+    const amount = matches.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    return { label: rowDef.label, unit: rowDef.unit, count, amount };
+  });
+  const total = rows.reduce((sum, row) => sum + row.amount, 0);
+  return { name, rows, total };
+}
+
+function renderReceiptPrintArea(month, contacts, names) {
+  const area = document.getElementById('receipt-print-area');
+  const eraMonth = formatEraMonth(month);
+
+  area.innerHTML = names
+    .map((name) => {
+      const data = buildReceiptData(name, month);
+      const phone = contacts.phones[name] || '';
+      const address = contacts.address || '';
+      const rowCells = (row) => `
+          <td class="rc-item-label">${escapeHtml(row.label)}</td>
+          <td class="rc-num">${numFmt(row.unit)}</td>
+          <td class="rc-op">×</td>
+          <td class="rc-num">${row.count} 回</td>
+          <td class="rc-op">=</td>
+          <td class="rc-num rc-row-amount">${numFmt(row.amount)} 円</td>`;
+      const restRowsHtml = data.rows
+        .slice(1)
+        .map((row) => `<tr>${rowCells(row)}</tr>`)
+        .join('');
+
+      return `
+      <div class="receipt-page">
+        <div class="receipt-logo">KESEN LARUS<span class="receipt-logo-sub">BASKETBALL CLUB</span></div>
+        <div class="receipt-title-bar">
+          <span>${escapeHtml(eraMonth)} 月分</span><span>交通費受領書</span>
+        </div>
+        <table class="receipt-info-table">
+          <tr>
+            <th>名前</th>
+            <td class="receipt-name-cell">${escapeHtml(formatDisplayName(name))}<span class="receipt-seal">印</span></td>
+            <th>連絡先</th>
+            <td>${escapeHtml(phone)}</td>
+          </tr>
+          <tr>
+            <th>住所</th>
+            <td colspan="3">${escapeHtml(address)}</td>
+          </tr>
+        </table>
+        <table class="receipt-amount-table">
+          <tr><th>金額</th><td class="receipt-amount-value">${numFmt(data.total)}</td><td class="receipt-amount-unit">円</td></tr>
+        </table>
+        <table class="receipt-detail-table">
+          <tr>
+            <th rowspan="${data.rows.length + 1}">交通費明細</th>
+            ${rowCells(data.rows[0])}
+          </tr>
+          ${restRowsHtml}
+          <tr class="rc-total-row">
+            <td colspan="5" class="rc-total-label">合計</td>
+            <td class="rc-num">${numFmt(data.total)} 円</td>
+          </tr>
+        </table>
+      </div>`;
+    })
+    .join('');
+}
+
+function handleReceiptPdfClick() {
+  const month = document.getElementById('summary-month').value;
+  if (!month) {
+    alert('対象月を選択してください');
+    return;
+  }
+  const contacts = loadContacts();
+  const names = STAFF_NAMES.filter((name) => buildReceiptData(name, month).rows.some((row) => row.count > 0));
+  if (names.length === 0) {
+    alert('対象月に支給記録がありません');
+    return;
+  }
+  renderReceiptPrintArea(month, contacts, names);
+  window.print();
 }
 
 /* ============================================================

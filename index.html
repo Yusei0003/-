@@ -119,10 +119,24 @@
         <tbody id="summary-tbody"></tbody>
       </table>
     </div>
+
+    <button type="button" id="btn-receipt-pdf" class="btn-primary receipt-pdf-btn">領収書をPDF出力（対象月・印刷ダイアログでPDF保存）</button>
+
+    <details class="contact-settings">
+      <summary>領収書用の連絡先・住所を設定（この端末にのみ保存されます）</summary>
+      <div class="contact-settings-body">
+        <label class="field-group">
+          住所（全員共通）
+          <input type="text" id="c-address" placeholder="例）陸前高田市高田町字中和野14-1">
+        </label>
+        <div id="contact-phone-list" class="contact-phone-list"></div>
+      </div>
+    </details>
   </section>
 </main>
 
 <div id="toast" class="toast"></div>
+<div id="receipt-print-area" class="receipt-print-area"></div>
 
 <script src="app.js"></script>
 </body>

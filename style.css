@@ -253,3 +253,124 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   transition: opacity 0.2s, transform 0.2s;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.receipt-pdf-btn { display: block; }
+
+.contact-settings {
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  padding: 4px 20px;
+}
+.contact-settings summary {
+  cursor: pointer;
+  padding: 12px 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+.contact-settings-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  padding: 4px 0 18px;
+}
+
+/* ============================================================
+ * 交通費受領書（印刷・PDF出力用）
+ * ============================================================ */
+.receipt-print-area { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  .receipt-print-area, .receipt-print-area * { visibility: visible; }
+  .receipt-print-area {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}
+
+.receipt-page {
+  width: 190mm;
+  margin: 0 auto;
+  padding: 12mm;
+  page-break-after: always;
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Segoe UI", sans-serif;
+  color: #000;
+}
+.receipt-page:last-child { page-break-after: auto; }
+
+.receipt-logo {
+  text-align: center;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #1c4e8a;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.receipt-logo-sub {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: #444;
+}
+
+.receipt-title-bar {
+  background: #000;
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  padding: 8px 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.receipt-info-table, .receipt-amount-table, .receipt-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+}
+.receipt-info-table th, .receipt-info-table td,
+.receipt-amount-table th, .receipt-amount-table td,
+.receipt-detail-table th, .receipt-detail-table td {
+  border: 1px solid #000;
+  padding: 8px 10px;
+}
+.receipt-info-table th, .receipt-amount-table th, .receipt-detail-table th {
+  background: #eee;
+  font-weight: 700;
+  width: 110px;
+  text-align: center;
+}
+.receipt-name-cell { position: relative; }
+.receipt-seal {
+  float: right;
+  border: 1px solid #000;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.receipt-amount-value { text-align: center; font-size: 1.4rem; font-weight: 700; }
+.receipt-amount-unit { width: 60px; text-align: center; }
+
+.receipt-detail-table td { border-style: dotted; }
+.receipt-detail-table th { border-style: solid; }
+.rc-item-label { width: 130px; }
+.rc-num { text-align: right; }
+.rc-op { text-align: center; width: 24px; }
+.rc-row-amount { width: 110px; }
+.rc-total-row td { border-style: solid; font-weight: 700; }
+.rc-total-label { text-align: right; padding-right: 16px; }
