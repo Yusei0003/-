@@ -139,6 +139,7 @@ function initTabs() {
       document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
       if (btn.dataset.tab === 'list') renderList();
       if (btn.dataset.tab === 'summary') renderSummary();
+      if (btn.dataset.tab === 'dashboard') renderDashboard();
     });
   });
 }
@@ -705,6 +706,191 @@ function showToast(msg) {
 }
 
 /* ============================================================
+ * ダッシュボード
+ * ============================================================ */
+const CATEGORY_CHART_COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)', 'var(--series-6)'];
+const STAFF_CHART_COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)'];
+const MONTH_LABELS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+
+function getYearsWithData() {
+  const years = new Set(records.map((r) => r.date.slice(0, 4)));
+  years.add(String(new Date().getFullYear()));
+  return [...years].sort().reverse();
+}
+
+function computeAnnualData(year) {
+  const yearRecords = records.filter((r) => r.date.slice(0, 4) === year);
+
+  const monthly = Array(12).fill(0);
+  yearRecords.forEach((r) => {
+    const m = Number(r.date.slice(5, 7)) - 1;
+    monthly[m] += Number(r.amount) || 0;
+  });
+  const total = monthly.reduce((a, b) => a + b, 0);
+  const activeDays = new Set(yearRecords.map((r) => r.date)).size;
+
+  const categories = RECEIPT_ROWS.map((rowDef) => ({
+    label: rowDef.label,
+    total: yearRecords.filter(rowDef.match).reduce((s, r) => s + (Number(r.amount) || 0), 0),
+  }));
+
+  const daysByName = new Map(STAFF_NAMES.map((n) => [n, new Set()]));
+  const amountByName = new Map(STAFF_NAMES.map((n) => [n, 0]));
+  yearRecords.forEach((r) => {
+    daysByName.get(r.name)?.add(r.date);
+    amountByName.set(r.name, (amountByName.get(r.name) || 0) + (Number(r.amount) || 0));
+  });
+  const staff = STAFF_NAMES.map((name) => {
+    const days = daysByName.get(name).size;
+    const amount = amountByName.get(name);
+    const rate = activeDays === 0 ? 0 : days / activeDays;
+    return { name, amount, days, rate };
+  });
+
+  const monthsWithData = monthly.filter((v) => v > 0).length;
+  const monthlyAverage = monthsWithData === 0 ? 0 : Math.round(total / monthsWithData);
+  const topStaff = staff.reduce((best, s) => (s.days > 0 && s.rate > (best?.rate ?? -1) ? s : best), null);
+
+  return { year, monthly, total, activeDays, categories, staff, monthlyAverage, topStaff };
+}
+
+function initDashboard() {
+  document.getElementById('dash-year').addEventListener('change', renderDashboard);
+}
+
+function renderDashboard() {
+  const yearSel = document.getElementById('dash-year');
+  const years = getYearsWithData();
+  const keep = yearSel.value || String(new Date().getFullYear());
+  yearSel.innerHTML = years.map((y) => `<option value="${y}">${y}年</option>`).join('');
+  yearSel.value = years.includes(keep) ? keep : years[0];
+
+  const data = computeAnnualData(yearSel.value);
+  renderDashTiles(data);
+  renderMonthlyChart(data);
+  renderCategoryChart(data);
+  renderStaffChart(data);
+}
+
+function renderDashTiles(data) {
+  const tiles = [
+    { label: '年間合計費用', value: yen(data.total) },
+    { label: '総活動日数', value: `${data.activeDays} 日` },
+    { label: '活動月平均費用', value: yen(data.monthlyAverage), sub: '記録のある月の平均' },
+    {
+      label: '稼働率トップ',
+      value: data.topStaff ? data.topStaff.name : '-',
+      sub: data.topStaff ? `${Math.round(data.topStaff.rate * 100)}%（${data.topStaff.days}/${data.activeDays}日）` : '',
+    },
+  ];
+  document.getElementById('dash-tiles').innerHTML = tiles
+    .map(
+      (t) => `
+    <div class="stat-tile">
+      <div class="stat-tile-label">${escapeHtml(t.label)}</div>
+      <div class="stat-tile-value">${escapeHtml(String(t.value))}</div>
+      ${t.sub ? `<div class="stat-tile-sub">${escapeHtml(t.sub)}</div>` : ''}
+    </div>`
+    )
+    .join('');
+}
+
+function showChartTooltip(evt, text) {
+  const tip = document.getElementById('chart-tooltip');
+  tip.textContent = text;
+  tip.style.left = evt.clientX + 'px';
+  tip.style.top = evt.clientY + 'px';
+  tip.classList.add('show');
+}
+function moveChartTooltip(evt) {
+  const tip = document.getElementById('chart-tooltip');
+  tip.style.left = evt.clientX + 'px';
+  tip.style.top = evt.clientY + 'px';
+}
+function hideChartTooltip() {
+  document.getElementById('chart-tooltip').classList.remove('show');
+}
+
+function renderBarChart(containerId, items, colors, options = {}) {
+  const container = document.getElementById(containerId);
+  const max = Math.max(...items.map((i) => i.value), 1);
+  const showValueLabel = options.showValueLabel !== false;
+
+  container.innerHTML = items
+    .map((item, i) => {
+      const heightPct = item.value > 0 ? Math.max((item.value / max) * 100, 2) : 0;
+      const color = typeof colors === 'function' ? colors(i) : colors[i % colors.length];
+      const tooltip = `${item.label}: ${yen(item.value)}`;
+      return `
+      <div class="chart-bar-col" data-tooltip="${escapeHtml(tooltip)}">
+        ${showValueLabel && item.value > 0 ? `<div class="chart-bar-value">${yen(item.value)}</div>` : ''}
+        <div class="chart-bar" style="height:${heightPct}%; background:${color}"></div>
+        <div class="chart-bar-label">${escapeHtml(item.label)}</div>
+      </div>`;
+    })
+    .join('');
+
+  container.querySelectorAll('.chart-bar-col').forEach((col) => {
+    col.addEventListener('mouseenter', (e) => showChartTooltip(e, col.dataset.tooltip));
+    col.addEventListener('mousemove', moveChartTooltip);
+    col.addEventListener('mouseleave', hideChartTooltip);
+  });
+}
+
+function renderMonthlyChart(data) {
+  const items = data.monthly.map((v, i) => ({ label: MONTH_LABELS[i], value: v }));
+  renderBarChart('dash-monthly-chart', items, ['var(--primary)'], { showValueLabel: false });
+
+  document.getElementById('dash-monthly-table').innerHTML = items
+    .map((it) => `<tr><td>${escapeHtml(it.label)}</td><td class="num">${yen(it.value)}</td></tr>`)
+    .join('');
+}
+
+function renderCategoryChart(data) {
+  renderBarChart(
+    'dash-category-chart',
+    data.categories.map((c) => ({ label: c.label, value: c.total })),
+    CATEGORY_CHART_COLORS
+  );
+
+  document.getElementById('dash-category-legend').innerHTML = data.categories
+    .map(
+      (c, i) =>
+        `<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:${CATEGORY_CHART_COLORS[i]}"></span>${escapeHtml(c.label)}</span>`
+    )
+    .join('');
+
+  document.getElementById('dash-category-table').innerHTML = data.categories
+    .map((c) => {
+      const pct = data.total === 0 ? 0 : Math.round((c.total / data.total) * 100);
+      return `<tr><td>${escapeHtml(c.label)}</td><td class="num">${yen(c.total)}</td><td class="num">${pct}%</td></tr>`;
+    })
+    .join('');
+}
+
+function renderStaffChart(data) {
+  renderBarChart(
+    'dash-staff-chart',
+    data.staff.map((s) => ({ label: s.name, value: s.amount })),
+    STAFF_CHART_COLORS
+  );
+
+  document.getElementById('dash-staff-legend').innerHTML = data.staff
+    .map(
+      (s, i) =>
+        `<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:${STAFF_CHART_COLORS[i]}"></span>${escapeHtml(s.name)}</span>`
+    )
+    .join('');
+
+  document.getElementById('dash-staff-table').innerHTML = data.staff
+    .map(
+      (s) =>
+        `<tr><td>${escapeHtml(s.name)}</td><td class="num">${yen(s.amount)}</td><td class="num">${s.days}日</td><td class="num">${Math.round(s.rate * 100)}%</td></tr>`
+    )
+    .join('');
+}
+
+/* ============================================================
  * 初期化
  * ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
@@ -712,6 +898,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initForm();
   initList();
   initSummary();
+  initDashboard();
   renderList();
   renderSummary();
+  renderDashboard();
 });

@@ -16,6 +16,7 @@
   <button class="tab-btn active" data-tab="entry">入力</button>
   <button class="tab-btn" data-tab="list">一覧</button>
   <button class="tab-btn" data-tab="summary">月次集計</button>
+  <button class="tab-btn" data-tab="dashboard">ダッシュボード</button>
 </nav>
 
 <main>
@@ -144,10 +145,59 @@
       <div class="contact-settings-body" id="contact-settings-body"></div>
     </details>
   </section>
+
+  <!-- ============ ダッシュボードタブ ============ -->
+  <section id="panel-dashboard" class="tab-panel">
+    <div class="filter-bar">
+      <label>対象年
+        <select id="dash-year"></select>
+      </label>
+    </div>
+
+    <div class="stat-tiles" id="dash-tiles"></div>
+
+    <div class="dash-grid">
+      <div class="chart-card">
+        <h3 class="chart-title">月別費用推移</h3>
+        <div class="chart-bars" id="dash-monthly-chart"></div>
+        <div class="chart-table-wrap">
+          <table class="sheet-table chart-table">
+            <thead><tr><th>月</th><th>費用</th></tr></thead>
+            <tbody id="dash-monthly-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h3 class="chart-title">活動区分別 費用内訳</h3>
+        <div class="chart-legend" id="dash-category-legend"></div>
+        <div class="chart-bars chart-bars-compact" id="dash-category-chart"></div>
+        <div class="chart-table-wrap">
+          <table class="sheet-table chart-table">
+            <thead><tr><th>区分</th><th>費用</th><th>割合</th></tr></thead>
+            <tbody id="dash-category-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="chart-card full-width">
+        <h3 class="chart-title">対象者別 年間稼働状況</h3>
+        <div class="chart-legend" id="dash-staff-legend"></div>
+        <div class="chart-bars chart-bars-compact" id="dash-staff-chart"></div>
+        <div class="chart-table-wrap">
+          <table class="sheet-table chart-table">
+            <thead><tr><th>氏名</th><th>年間支給額</th><th>参加日数</th><th>稼働率</th></tr></thead>
+            <tbody id="dash-staff-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <div id="toast" class="toast"></div>
 <div id="receipt-print-area" class="receipt-print-area"></div>
+<div id="chart-tooltip" class="chart-tooltip"></div>
 
 <script src="xlsx-writer.js"></script>
 <script src="app.js"></script>
