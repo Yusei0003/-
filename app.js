@@ -508,6 +508,117 @@ function initSummary() {
   initContactSettings();
   document.getElementById('btn-receipt-pdf').addEventListener('click', handleReceiptPdfClick);
   document.getElementById('btn-sashikomi-export').addEventListener('click', handleSashikomiExportClick);
+  initImport();
+}
+
+/* ============================================================
+ * 過去データのCSVインポート
+ * ============================================================ */
+function parseCsv(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter((l) => l.length > 0);
+  return lines.map((line) => {
+    const cells = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          cur += ch;
+        }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        cells.push(cur);
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    cells.push(cur);
+    return cells;
+  });
+}
+
+function initImport() {
+  document.getElementById('import-file').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => handleImportCsv(String(reader.result));
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  });
+}
+
+function handleImportCsv(text) {
+  const rows = parseCsv(text);
+  if (rows.length === 0) {
+    document.getElementById('import-result').textContent = 'ファイルが空です';
+    return;
+  }
+  const header = rows[0].map((h) => h.trim());
+  const idx = (name) => header.indexOf(name);
+  const iDate = idx('date');
+  const iName = idx('name');
+  const iCategory = idx('category');
+  const iRole = idx('role');
+  const iLocation = idx('location');
+  const iDuration = idx('duration');
+  const iAmount = idx('amount');
+  const iNote = idx('note');
+
+  if (iDate === -1 || iName === -1 || iCategory === -1 || iAmount === -1) {
+    document.getElementById('import-result').textContent =
+      'CSVの形式が正しくありません（date, name, category, amount 列が必要です）';
+    return;
+  }
+
+  let added = 0;
+  let duplicated = 0;
+  let invalid = 0;
+
+  rows.slice(1).forEach((cells) => {
+    if (cells.length < 2) return;
+    const date = cells[iDate]?.trim();
+    const name = cells[iName]?.trim();
+    const category = cells[iCategory]?.trim();
+    const role = iRole !== -1 ? cells[iRole]?.trim() || undefined : undefined;
+    const location = iLocation !== -1 ? cells[iLocation]?.trim() || undefined : undefined;
+    const duration = iDuration !== -1 ? cells[iDuration]?.trim() || undefined : undefined;
+    const amount = Number(cells[iAmount]);
+    const note = iNote !== -1 ? cells[iNote]?.trim() || '' : '';
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !STAFF_NAMES.includes(name) || !['practice', 'weekend'].includes(category) || !Number.isFinite(amount)) {
+      invalid++;
+      return;
+    }
+    const isDuplicate = records.some(
+      (r) => r.date === date && r.name === name && r.category === category && r.role === role && r.location === location && r.duration === duration && Number(r.amount) === amount
+    );
+    if (isDuplicate) {
+      duplicated++;
+      return;
+    }
+    addRecord({ date, name, category, role, location, duration, amount, note });
+    added++;
+  });
+
+  persist();
+  renderList();
+  renderSummary();
+  renderDashboard();
+
+  const resultLines = [`${added}件を追加しました`];
+  if (duplicated > 0) resultLines.push(`（重複のためスキップ: ${duplicated}件）`);
+  if (invalid > 0) resultLines.push(`（形式不正のためスキップ: ${invalid}件）`);
+  document.getElementById('import-result').textContent = resultLines.join(' ');
+  showToast(`${added}件をインポートしました`);
 }
 
 /* ============================================================
@@ -710,21 +821,37 @@ function showToast(msg) {
  * ============================================================ */
 const CATEGORY_CHART_COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)', 'var(--series-6)'];
 const STAFF_CHART_COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)'];
-const MONTH_LABELS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+const FISCAL_MONTH_LABELS = ['4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月', '3月'];
 
-function getYearsWithData() {
-  const years = new Set(records.map((r) => r.date.slice(0, 4)));
-  years.add(String(new Date().getFullYear()));
-  return [...years].sort().reverse();
+/* 年度は4月始まり(その年の4月〜翌年3月)。fiscalYearOfは年度の開始年(西暦)を返す */
+function fiscalYearOf(dateStr) {
+  const y = Number(dateStr.slice(0, 4));
+  const m = Number(dateStr.slice(5, 7));
+  return m >= 4 ? y : y - 1;
 }
 
-function computeAnnualData(year) {
-  const yearRecords = records.filter((r) => r.date.slice(0, 4) === year);
+function fiscalMonthIndex(dateStr) {
+  const m = Number(dateStr.slice(5, 7));
+  return m >= 4 ? m - 4 : m + 8;
+}
+
+function fiscalYearLabel(fy) {
+  const reiwaYear = fy - 2018;
+  return `令和${reiwaYear}年度（${fy}年4月〜${fy + 1}年3月）`;
+}
+
+function getFiscalYearsWithData() {
+  const years = new Set(records.map((r) => fiscalYearOf(r.date)));
+  years.add(fiscalYearOf(new Date().toISOString().slice(0, 10)));
+  return [...years].sort((a, b) => b - a);
+}
+
+function computeAnnualData(fiscalYear) {
+  const yearRecords = records.filter((r) => fiscalYearOf(r.date) === fiscalYear);
 
   const monthly = Array(12).fill(0);
   yearRecords.forEach((r) => {
-    const m = Number(r.date.slice(5, 7)) - 1;
-    monthly[m] += Number(r.amount) || 0;
+    monthly[fiscalMonthIndex(r.date)] += Number(r.amount) || 0;
   });
   const total = monthly.reduce((a, b) => a + b, 0);
   const activeDays = new Set(yearRecords.map((r) => r.date)).size;
@@ -751,7 +878,7 @@ function computeAnnualData(year) {
   const monthlyAverage = monthsWithData === 0 ? 0 : Math.round(total / monthsWithData);
   const topStaff = staff.reduce((best, s) => (s.days > 0 && s.rate > (best?.rate ?? -1) ? s : best), null);
 
-  return { year, monthly, total, activeDays, categories, staff, monthlyAverage, topStaff };
+  return { fiscalYear, monthly, total, activeDays, categories, staff, monthlyAverage, topStaff };
 }
 
 function initDashboard() {
@@ -760,12 +887,12 @@ function initDashboard() {
 
 function renderDashboard() {
   const yearSel = document.getElementById('dash-year');
-  const years = getYearsWithData();
-  const keep = yearSel.value || String(new Date().getFullYear());
-  yearSel.innerHTML = years.map((y) => `<option value="${y}">${y}年</option>`).join('');
+  const years = getFiscalYearsWithData();
+  const keep = yearSel.value ? Number(yearSel.value) : fiscalYearOf(new Date().toISOString().slice(0, 10));
+  yearSel.innerHTML = years.map((y) => `<option value="${y}">${escapeHtml(fiscalYearLabel(y))}</option>`).join('');
   yearSel.value = years.includes(keep) ? keep : years[0];
 
-  const data = computeAnnualData(yearSel.value);
+  const data = computeAnnualData(Number(yearSel.value));
   renderDashTiles(data);
   renderMonthlyChart(data);
   renderCategoryChart(data);
@@ -838,7 +965,7 @@ function renderBarChart(containerId, items, colors, options = {}) {
 }
 
 function renderMonthlyChart(data) {
-  const items = data.monthly.map((v, i) => ({ label: MONTH_LABELS[i], value: v }));
+  const items = data.monthly.map((v, i) => ({ label: FISCAL_MONTH_LABELS[i], value: v }));
   renderBarChart('dash-monthly-chart', items, ['var(--primary)'], { showValueLabel: false });
 
   document.getElementById('dash-monthly-table').innerHTML = items

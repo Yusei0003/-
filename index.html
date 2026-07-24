@@ -144,12 +144,21 @@
       <summary>領収書用の連絡先・住所を設定（この端末にのみ保存されます）</summary>
       <div class="contact-settings-body" id="contact-settings-body"></div>
     </details>
+
+    <details class="contact-settings">
+      <summary>過去データをインポート（CSV）</summary>
+      <div class="import-body">
+        <p class="import-hint">日付・氏名・区分などの列を持つCSVファイルを選ぶと、この端末のデータに追加されます（同じ内容の記録は重複登録されません）。</p>
+        <input type="file" id="import-file" accept=".csv,text/csv">
+        <div id="import-result" class="import-result"></div>
+      </div>
+    </details>
   </section>
 
   <!-- ============ ダッシュボードタブ ============ -->
   <section id="panel-dashboard" class="tab-panel">
     <div class="filter-bar">
-      <label>対象年
+      <label>対象年度
         <select id="dash-year"></select>
       </label>
     </div>

@@ -355,6 +355,10 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   color: var(--primary-dark);
 }
 
+.import-body { padding: 4px 0 18px; }
+.import-hint { font-size: 0.82rem; color: var(--muted); margin: 0 0 10px; }
+.import-result { margin-top: 10px; font-size: 0.85rem; color: var(--primary-dark); white-space: pre-line; }
+
 /* ============================================================
  * ダッシュボード
  * ============================================================ */
