@@ -22,41 +22,17 @@
   <!-- ============ 入力タブ ============ -->
   <section id="panel-entry" class="tab-panel active">
     <form id="entry-form">
-      <div class="form-grid">
+      <div class="form-grid form-grid-compact">
         <label class="field-group">
           日付
           <input type="date" id="f-date" required>
         </label>
 
         <label class="field-group">
-          氏名
-          <input type="text" id="f-name" list="name-list" placeholder="氏名を入力" required>
-          <datalist id="name-list"></datalist>
-        </label>
-
-        <label class="field-group">
           区分
           <select id="f-category">
-            <option value="practice">通常練習（スタッフ）</option>
-            <option value="weekend">土日祝日活動（スタッフ）</option>
-            <option value="referee">帯同審判（外部依頼者）</option>
-            <option value="commissioner">コミッショナー（外部依頼者）</option>
-          </select>
-        </label>
-
-        <label class="field-group" id="group-role">
-          役割
-          <select id="f-role">
-            <option value="main_coach">メインコーチ（1,000円）</option>
-            <option value="staff">スタッフ（500円）</option>
-          </select>
-        </label>
-
-        <label class="field-group" id="group-gametype">
-          試合種別
-          <select id="f-gametype">
-            <option value="practice_game">練習試合</option>
-            <option value="official_game">公式戦（2,500円/試合）</option>
+            <option value="practice">通常練習</option>
+            <option value="weekend">土日祝日活動</option>
           </select>
         </label>
 
@@ -76,44 +52,26 @@
           </select>
         </label>
 
-        <label class="field-group checkbox-field" id="group-club-affiliated">
-          <input type="checkbox" id="f-club-affiliated">
-          クラブ関係者・保護者が担当（適用除外）
-        </label>
-
-        <label class="field-group">
-          実施状況
-          <select id="f-status">
-            <option value="done">実施</option>
-            <option value="cancel_before">中止（開始前）</option>
-            <option value="cancel_after">中止（現地到着後）</option>
-          </select>
-        </label>
-
-        <label class="field-group checkbox-field">
-          <input type="checkbox" id="f-meal">
-          弁当支給あり（代替措置）
-        </label>
-
-        <div class="field-group suggested-box">
-          規程による目安額
-          <div class="suggested-amount" id="f-suggested">¥0</div>
-          <div class="suggested-note" id="f-suggested-note"></div>
-          <button type="button" id="f-use-suggested" class="btn-secondary">目安額を反映</button>
+        <div class="field-group unit-amount-box">
+          支給額
+          <div class="unit-amount" id="f-unit-amount">¥500 / 人</div>
         </div>
-
-        <label class="field-group">
-          支給額（確定）
-          <input type="number" id="f-amount" step="1" min="0" required>
-        </label>
-
-        <label class="field-group full-width">
-          備考
-          <input type="text" id="f-note" placeholder="特例事項・承認内容など">
-        </label>
       </div>
 
-      <button type="submit" class="btn-primary">登録する</button>
+      <div class="staff-checklist">
+        <div class="staff-checklist-header">
+          <span>出席した対象者を選択</span>
+          <button type="button" id="f-select-all" class="btn-secondary">全員選択</button>
+        </div>
+        <div id="staff-checkboxes" class="staff-checkbox-grid"></div>
+      </div>
+
+      <label class="field-group note-field">
+        備考（任意）
+        <input type="text" id="f-note" placeholder="必要な場合のみ">
+      </label>
+
+      <button type="submit" class="btn-primary">登録する（<span id="f-select-count">0</span>名）</button>
     </form>
   </section>
 

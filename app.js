@@ -1,84 +1,33 @@
 'use strict';
 
 /* ============================================================
- * 支給ルール（KESEN LARUS BASKETBALL CLUB 交通費等及び謝礼金支給規程）
+ * 支給ルール（KESEN LARUS BASKETBALL CLUB 交通費等及び謝礼金支給規程 第3条・第4条）
  * ============================================================ */
+const STAFF_NAMES = ['脇坂健吾', '小山裕介', '熊谷大輔', '今野和倫', '和田悠晟'];
+
 const RULES = {
-  practice: {
-    label: '通常練習（スタッフ）',
-    roles: {
-      main_coach: { label: 'メインコーチ', amount: 1000 },
-      staff: { label: 'スタッフ', amount: 500 },
-    },
-  },
+  practice: { label: '通常練習', amount: 500 },
   weekend: {
-    label: '土日祝日活動（スタッフ）',
+    label: '土日祝日活動',
     table: {
       in: { half: 1000, full: 1500 },
       out: { half: 2000, full: 3000 },
     },
   },
-  referee: {
-    label: '帯同審判（外部依頼者）',
-    table: {
-      practice_game: {
-        in: { half: 2000, full: 4000 },
-        out: { half: 3000, full: 5000 },
-      },
-      official_game: { flat: 2500 },
-    },
-  },
-  commissioner: {
-    label: 'コミッショナー（外部依頼者）',
-    table: { in: 1000, out: 2000 },
-  },
 };
 
 const LOCATION_LABEL = { in: '気仙管内', out: '気仙管外' };
 const DURATION_LABEL = { half: '半日（4h以内）', full: '1日（4h超）' };
-const STATUS_LABEL = {
-  done: '実施',
-  cancel_before: '中止（開始前）',
-  cancel_after: '中止（現地到着後）',
-};
 
-const STORAGE_KEY = 'larus_expense_records_v1';
+const STORAGE_KEY = 'larus_expense_records_v2';
 
 /* ============================================================
  * 金額計算
  * ============================================================ */
-function calcSuggestedAmount(entry) {
-  if (entry.status === 'cancel_before') return 0;
-
-  let base = 0;
-  if (entry.category === 'practice') {
-    base = RULES.practice.roles[entry.role]?.amount ?? 0;
-  } else if (entry.category === 'weekend') {
-    base = RULES.weekend.table[entry.location]?.[entry.duration] ?? 0;
-  } else if (entry.category === 'referee') {
-    if (entry.gameType === 'official_game') {
-      base = RULES.referee.table.official_game.flat;
-    } else {
-      base = RULES.referee.table.practice_game[entry.location]?.[entry.duration] ?? 0;
-    }
-  } else if (entry.category === 'commissioner') {
-    base = RULES.commissioner.table[entry.location] ?? 0;
-  }
-
-  if (entry.status === 'cancel_after') return 0; // 交通費相当額のみ→要手動入力
-  if (entry.category === 'referee' && entry.clubAffiliated) return 0; // 適用除外
-  if (entry.mealProvided) return 0; // 代替措置（弁当支給）
-
-  return base;
-}
-
-function suggestionNote(entry) {
-  const notes = [];
-  if (entry.status === 'cancel_before') notes.push('開始前中止のため支給なし');
-  if (entry.status === 'cancel_after') notes.push('現地到着後中止：交通費相当額のみ（金額は手動入力してください）');
-  if (entry.category === 'referee' && entry.clubAffiliated) notes.push('適用除外（クラブ関係者/保護者）のため支給なし');
-  if (entry.mealProvided) notes.push('弁当支給のため金銭支給なし（代表判断で調整可）');
-  return notes.join(' / ');
+function calcUnitAmount(category, location, duration) {
+  if (category === 'practice') return RULES.practice.amount;
+  if (category === 'weekend') return RULES.weekend.table[location]?.[duration] ?? 0;
+  return 0;
 }
 
 /* ============================================================
@@ -103,6 +52,9 @@ let records = loadRecords();
 function addRecord(record) {
   record.id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   records.push(record);
+}
+
+function persist() {
   saveRecords(records);
 }
 
@@ -131,23 +83,10 @@ function categoryLabel(c) {
 }
 
 function describeEntry(entry) {
-  const parts = [];
-  if (entry.category === 'practice') {
-    parts.push(RULES.practice.roles[entry.role]?.label ?? entry.role);
-  } else if (entry.category === 'weekend') {
-    parts.push(LOCATION_LABEL[entry.location], DURATION_LABEL[entry.duration]);
-  } else if (entry.category === 'referee') {
-    parts.push(entry.gameType === 'official_game' ? '公式戦' : '練習試合');
-    if (entry.gameType !== 'official_game') {
-      parts.push(LOCATION_LABEL[entry.location], DURATION_LABEL[entry.duration]);
-    }
-    if (entry.clubAffiliated) parts.push('クラブ関係者');
-  } else if (entry.category === 'commissioner') {
-    parts.push(LOCATION_LABEL[entry.location]);
+  if (entry.category === 'weekend') {
+    return [LOCATION_LABEL[entry.location], DURATION_LABEL[entry.duration]].filter(Boolean).join(' / ');
   }
-  if (entry.status !== 'done') parts.push(STATUS_LABEL[entry.status]);
-  if (entry.mealProvided) parts.push('弁当支給あり');
-  return parts.filter(Boolean).join(' / ');
+  return '';
 }
 
 /* ============================================================
@@ -169,7 +108,7 @@ function initTabs() {
 }
 
 /* ============================================================
- * 入力フォーム
+ * 入力フォーム（出席チェックリスト方式）
  * ============================================================ */
 function initForm() {
   const form = document.getElementById('entry-form');
@@ -177,113 +116,82 @@ function initForm() {
   const dateInput = document.getElementById('f-date');
   dateInput.value = new Date().toISOString().slice(0, 10);
 
-  categorySel.addEventListener('change', updateConditionalFields);
-  updateConditionalFields();
+  renderStaffCheckboxes();
 
-  form.addEventListener('input', updateSuggestedAmount);
-  form.addEventListener('change', updateSuggestedAmount);
+  categorySel.addEventListener('change', () => {
+    updateConditionalFields();
+    updateUnitAmount();
+  });
+  document.getElementById('f-location').addEventListener('change', updateUnitAmount);
+  document.getElementById('f-duration').addEventListener('change', updateUnitAmount);
+
+  document.getElementById('f-select-all').addEventListener('click', () => {
+    const boxes = document.querySelectorAll('.staff-checkbox');
+    const allChecked = [...boxes].every((b) => b.checked);
+    boxes.forEach((b) => (b.checked = !allChecked));
+    updateSelectedCount();
+  });
+
+  updateConditionalFields();
+  updateUnitAmount();
+  updateSelectedCount();
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const entry = readForm();
-    if (!entry.name.trim()) {
-      alert('氏名を入力してください');
+    const checked = [...document.querySelectorAll('.staff-checkbox:checked')].map((b) => b.value);
+    if (checked.length === 0) {
+      alert('対象者を1名以上選択してください');
       return;
     }
-    addRecord(entry);
-    updateNameList();
-    form.reset();
-    dateInput.value = new Date().toISOString().slice(0, 10);
-    categorySel.value = 'practice';
-    updateConditionalFields();
-    updateSuggestedAmount();
-    showToast('登録しました');
-  });
+    const category = categorySel.value;
+    const location = document.getElementById('f-location').value;
+    const duration = document.getElementById('f-duration').value;
+    const amount = calcUnitAmount(category, location, duration);
+    const note = document.getElementById('f-note').value;
+    const date = dateInput.value;
 
-  updateSuggestedAmount();
+    checked.forEach((name) => {
+      addRecord({ date, name, category, location, duration, amount, note });
+    });
+    persist();
+
+    document.querySelectorAll('.staff-checkbox').forEach((b) => (b.checked = false));
+    document.getElementById('f-note').value = '';
+    updateSelectedCount();
+    showToast(`${checked.length}名分を登録しました`);
+  });
 }
 
-const CONDITIONAL_GROUP_IDS = [
-  'group-role',
-  'group-gametype',
-  'group-location',
-  'group-duration',
-  'group-club-affiliated',
-];
+function renderStaffCheckboxes() {
+  const wrap = document.getElementById('staff-checkboxes');
+  wrap.innerHTML = STAFF_NAMES.map(
+    (name, i) => `
+    <label class="staff-chip">
+      <input type="checkbox" class="staff-checkbox" value="${escapeHtml(name)}" id="staff-cb-${i}">
+      <span>${escapeHtml(name)}</span>
+    </label>`
+  ).join('');
+  wrap.querySelectorAll('.staff-checkbox').forEach((cb) => cb.addEventListener('change', updateSelectedCount));
+}
+
+function updateSelectedCount() {
+  const count = document.querySelectorAll('.staff-checkbox:checked').length;
+  document.getElementById('f-select-count').textContent = count;
+}
 
 function updateConditionalFields() {
   const category = document.getElementById('f-category').value;
-  CONDITIONAL_GROUP_IDS.forEach((id) => (document.getElementById(id).style.display = 'none'));
-
-  if (category === 'practice') {
-    document.getElementById('group-role').style.display = '';
-  } else if (category === 'weekend') {
-    document.getElementById('group-location').style.display = '';
-    document.getElementById('group-duration').style.display = '';
-  } else if (category === 'referee') {
-    document.getElementById('group-gametype').style.display = '';
-    const isPracticeGame = document.getElementById('f-gametype').value !== 'official_game';
-    if (isPracticeGame) {
-      document.getElementById('group-location').style.display = '';
-      document.getElementById('group-duration').style.display = '';
-    }
-    document.getElementById('group-club-affiliated').style.display = '';
-  } else if (category === 'commissioner') {
-    document.getElementById('group-location').style.display = '';
-  }
+  const show = category === 'weekend';
+  document.getElementById('group-location').style.display = show ? '' : 'none';
+  document.getElementById('group-duration').style.display = show ? '' : 'none';
 }
 
-function readForm() {
-  return {
-    date: document.getElementById('f-date').value,
-    name: document.getElementById('f-name').value,
-    category: document.getElementById('f-category').value,
-    role: document.getElementById('f-role').value,
-    location: document.getElementById('f-location').value,
-    duration: document.getElementById('f-duration').value,
-    gameType: document.getElementById('f-gametype').value,
-    clubAffiliated: document.getElementById('f-club-affiliated').checked,
-    status: document.getElementById('f-status').value,
-    mealProvided: document.getElementById('f-meal').checked,
-    amount: Number(document.getElementById('f-amount').value) || 0,
-    note: document.getElementById('f-note').value,
-  };
-}
-
-function updateSuggestedAmount() {
+function updateUnitAmount() {
   const category = document.getElementById('f-category').value;
-  if (category === 'referee') {
-    const isPracticeGame = document.getElementById('f-gametype').value !== 'official_game';
-    document.getElementById('group-location').style.display = isPracticeGame ? '' : 'none';
-    document.getElementById('group-duration').style.display = isPracticeGame ? '' : 'none';
-  }
-  const entry = readForm();
-  const suggested = calcSuggestedAmount(entry);
-  document.getElementById('f-suggested').textContent = yen(suggested);
-  const noteEl = document.getElementById('f-suggested-note');
-  noteEl.textContent = suggestionNote(entry);
-  const amountInput = document.getElementById('f-amount');
-  if (!amountInput.dataset.touched) {
-    amountInput.value = suggested;
-  }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const amountInput = document.getElementById('f-amount');
-  amountInput.addEventListener('input', () => {
-    amountInput.dataset.touched = '1';
-  });
-  document.getElementById('f-use-suggested').addEventListener('click', () => {
-    const entry = readForm();
-    amountInput.value = calcSuggestedAmount(entry);
-    delete amountInput.dataset.touched;
-  });
-});
-
-function updateNameList() {
-  const names = [...new Set(records.map((r) => r.name).filter(Boolean))].sort();
-  const datalist = document.getElementById('name-list');
-  datalist.innerHTML = names.map((n) => `<option value="${escapeHtml(n)}">`).join('');
+  const location = document.getElementById('f-location').value;
+  const duration = document.getElementById('f-duration').value;
+  const amount = calcUnitAmount(category, location, duration);
+  document.getElementById('f-unit-amount').textContent = yen(amount) + ' / 人';
 }
 
 /* ============================================================
@@ -335,15 +243,17 @@ function renderList() {
     });
   });
 
-  populateMonthOptions('list-month-filter', monthFilter);
+  populateMonthOptions('list-month-filter', monthFilter, true);
 }
 
-function populateMonthOptions(selectId, current) {
-  const months = [...new Set(records.map((r) => monthKey(r.date)).filter(Boolean))].sort().reverse();
+function populateMonthOptions(selectId, current, includeAllOption) {
+  const thisMonth = monthKey(new Date().toISOString());
+  const months = [...new Set([...records.map((r) => monthKey(r.date)), thisMonth].filter(Boolean))].sort().reverse();
   const sel = document.getElementById(selectId);
   const keep = current || sel.value;
-  sel.innerHTML = '<option value="">すべての月</option>' + months.map((m) => `<option value="${m}">${m}</option>`).join('');
-  sel.value = keep;
+  const allOption = includeAllOption ? '<option value="">すべての月</option>' : '';
+  sel.innerHTML = allOption + months.map((m) => `<option value="${m}">${m}</option>`).join('');
+  sel.value = keep || (includeAllOption ? '' : thisMonth);
 }
 
 function initList() {
@@ -356,11 +266,11 @@ function initList() {
  * ============================================================ */
 function renderSummary() {
   const monthSel = document.getElementById('summary-month');
-  populateMonthOptions('summary-month', monthSel.value);
-  const month = monthSel.value || monthKey(new Date().toISOString());
+  populateMonthOptions('summary-month', monthSel.value, false);
+  const month = monthSel.value;
 
   const filtered = records.filter((r) => monthKey(r.date) === month);
-  const byName = new Map();
+  const byName = new Map(STAFF_NAMES.map((n) => [n, 0]));
   filtered.forEach((r) => {
     byName.set(r.name, (byName.get(r.name) || 0) + (Number(r.amount) || 0));
   });
@@ -368,17 +278,16 @@ function renderSummary() {
   const tbody = document.getElementById('summary-tbody');
   tbody.innerHTML = '';
   let total = 0;
-  [...byName.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0], 'ja'))
-    .forEach(([name, amount]) => {
-      total += amount;
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${escapeHtml(name)}</td><td class="num">${yen(amount)}</td>`;
-      tbody.appendChild(tr);
-    });
+  STAFF_NAMES.forEach((name) => {
+    const amount = byName.get(name) || 0;
+    total += amount;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(name)}</td><td class="num">${yen(amount)}</td>`;
+    tbody.appendChild(tr);
+  });
 
   document.getElementById('summary-total').textContent = yen(total);
-  document.getElementById('summary-count').textContent = byName.size + ' 名';
+  document.getElementById('summary-count').textContent = STAFF_NAMES.length + ' 名';
 
   const payDate = nextPaymentDate(month);
   document.getElementById('summary-paydate').textContent = payDate;
@@ -422,7 +331,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initForm();
   initList();
   initSummary();
-  updateNameList();
   renderList();
   renderSummary();
 });
