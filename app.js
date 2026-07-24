@@ -144,115 +144,145 @@ function initTabs() {
 }
 
 /* ============================================================
- * 入力フォーム（出席チェックリスト方式）
+ * 入力フォーム（対象者・区分・役割を選び、参加日をカレンダーで一括選択）
  * ============================================================ */
+let calYear, calMonth; // 1-indexed month
+let selectedDates = new Set();
+
 function initForm() {
   const form = document.getElementById('entry-form');
+  const nameSel = document.getElementById('f-name');
   const categorySel = document.getElementById('f-category');
-  const dateInput = document.getElementById('f-date');
-  dateInput.value = new Date().toISOString().slice(0, 10);
 
-  renderStaffCheckboxes();
+  nameSel.innerHTML = STAFF_NAMES.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
 
-  categorySel.addEventListener('change', () => {
-    updateConditionalFields();
-    updateRoleSelectVisibility();
+  nameSel.addEventListener('change', () => {
+    applyDefaultRole();
     updateUnitAmount();
   });
+  categorySel.addEventListener('change', () => {
+    updateConditionalFields();
+    updateUnitAmount();
+  });
+  document.getElementById('f-role').addEventListener('change', updateUnitAmount);
   document.getElementById('f-location').addEventListener('change', updateUnitAmount);
   document.getElementById('f-duration').addEventListener('change', updateUnitAmount);
 
-  document.getElementById('f-select-all').addEventListener('click', () => {
-    const boxes = document.querySelectorAll('.staff-checkbox');
-    const allChecked = [...boxes].every((b) => b.checked);
-    boxes.forEach((b) => (b.checked = !allChecked));
-    updateSelectedCount();
-  });
-
+  initCalendar();
+  applyDefaultRole();
   updateConditionalFields();
-  updateRoleSelectVisibility();
   updateUnitAmount();
-  updateSelectedCount();
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const checkedBoxes = [...document.querySelectorAll('.staff-checkbox:checked')];
-    if (checkedBoxes.length === 0) {
-      alert('対象者を1名以上選択してください');
+    if (selectedDates.size === 0) {
+      alert('参加した日を1日以上選択してください');
       return;
     }
+    const name = nameSel.value;
     const category = categorySel.value;
-    const location = document.getElementById('f-location').value;
-    const duration = document.getElementById('f-duration').value;
+    const role = category === 'practice' ? document.getElementById('f-role').value : undefined;
+    const location = category === 'weekend' ? document.getElementById('f-location').value : undefined;
+    const duration = category === 'weekend' ? document.getElementById('f-duration').value : undefined;
     const note = document.getElementById('f-note').value;
-    const date = dateInput.value;
+    const amount = calcUnitAmount(category, { role, location, duration });
 
-    checkedBoxes.forEach((cb) => {
-      const name = cb.value;
-      const roleSelect = document.getElementById(cb.dataset.roleId);
-      const role = roleSelect ? roleSelect.value : undefined;
-      const amount = calcUnitAmount(category, { role, location, duration });
+    const dates = [...selectedDates].sort();
+    dates.forEach((date) => {
       addRecord({ date, name, category, role, location, duration, amount, note });
     });
     persist();
 
-    document.querySelectorAll('.staff-checkbox').forEach((b) => (b.checked = false));
-    document.querySelectorAll('.staff-role').forEach((s) => (s.value = s.dataset.defaultRole));
+    selectedDates.clear();
+    renderCalendar();
     document.getElementById('f-note').value = '';
-    updateSelectedCount();
-    showToast(`${checkedBoxes.length}名分を登録しました`);
+    showToast(`${dates.length}日分を登録しました`);
   });
 }
 
-function renderStaffCheckboxes() {
-  const wrap = document.getElementById('staff-checkboxes');
-  wrap.innerHTML = STAFF_NAMES.map((name, i) => {
-    const roleId = `staff-role-${i}`;
-    const defaultRole = DEFAULT_ROLE[name] ?? 'staff';
-    return `
-    <div class="staff-chip">
-      <label class="staff-chip-main">
-        <input type="checkbox" class="staff-checkbox" value="${escapeHtml(name)}" id="staff-cb-${i}" data-role-id="${roleId}">
-        <span>${escapeHtml(name)}</span>
-      </label>
-      <select class="staff-role" id="${roleId}" data-default-role="${defaultRole}">
-        <option value="staff"${defaultRole === 'staff' ? ' selected' : ''}>スタッフ（500円）</option>
-        <option value="main_coach"${defaultRole === 'main_coach' ? ' selected' : ''}>メインコーチ（1,000円）</option>
-      </select>
-    </div>`;
-  }).join('');
-  wrap.querySelectorAll('.staff-checkbox').forEach((cb) => cb.addEventListener('change', updateSelectedCount));
-}
-
-function updateRoleSelectVisibility() {
-  const category = document.getElementById('f-category').value;
-  const show = category === 'practice';
-  document.querySelectorAll('.staff-role').forEach((s) => (s.style.display = show ? '' : 'none'));
-}
-
-function updateSelectedCount() {
-  const count = document.querySelectorAll('.staff-checkbox:checked').length;
-  document.getElementById('f-select-count').textContent = count;
+function applyDefaultRole() {
+  const name = document.getElementById('f-name').value;
+  document.getElementById('f-role').value = DEFAULT_ROLE[name] ?? 'staff';
 }
 
 function updateConditionalFields() {
   const category = document.getElementById('f-category').value;
-  const show = category === 'weekend';
-  document.getElementById('group-location').style.display = show ? '' : 'none';
-  document.getElementById('group-duration').style.display = show ? '' : 'none';
+  document.getElementById('group-role').style.display = category === 'practice' ? '' : 'none';
+  document.getElementById('group-location').style.display = category === 'weekend' ? '' : 'none';
+  document.getElementById('group-duration').style.display = category === 'weekend' ? '' : 'none';
 }
 
 function updateUnitAmount() {
   const category = document.getElementById('f-category').value;
-  const box = document.getElementById('f-unit-amount');
-  if (category === 'practice') {
-    box.textContent = `スタッフ ${yen(RULES.practice.roles.staff.amount)} / メインコーチ ${yen(RULES.practice.roles.main_coach.amount)}`;
-    return;
-  }
+  const role = document.getElementById('f-role').value;
   const location = document.getElementById('f-location').value;
   const duration = document.getElementById('f-duration').value;
-  const amount = calcUnitAmount(category, { location, duration });
-  box.textContent = yen(amount) + ' / 人';
+  const amount = calcUnitAmount(category, { role, location, duration });
+  document.getElementById('f-unit-amount').textContent = yen(amount) + ' / 日';
+}
+
+/* ============================================================
+ * カレンダー（参加日の複数選択）
+ * ============================================================ */
+function initCalendar() {
+  const today = new Date();
+  calYear = today.getFullYear();
+  calMonth = today.getMonth() + 1;
+
+  document.getElementById('cal-prev').addEventListener('click', () => shiftCalendarMonth(-1));
+  document.getElementById('cal-next').addEventListener('click', () => shiftCalendarMonth(1));
+  document.getElementById('cal-clear').addEventListener('click', () => {
+    selectedDates.clear();
+    renderCalendar();
+  });
+
+  renderCalendar();
+}
+
+function shiftCalendarMonth(delta) {
+  calMonth += delta;
+  if (calMonth < 1) {
+    calMonth = 12;
+    calYear -= 1;
+  } else if (calMonth > 12) {
+    calMonth = 1;
+    calYear += 1;
+  }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  document.getElementById('cal-label').textContent = `${calYear}年${calMonth}月`;
+  document.getElementById('f-select-count').textContent = selectedDates.size;
+
+  const grid = document.getElementById('cal-grid');
+  const firstWeekday = new Date(calYear, calMonth - 1, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+
+  let html = '';
+  for (let i = 0; i < firstWeekday; i++) {
+    html += '<span class="cal-day cal-day-empty"></span>';
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const selected = selectedDates.has(dateStr);
+    html += `<button type="button" class="cal-day${selected ? ' selected' : ''}" data-date="${dateStr}">${d}</button>`;
+  }
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.cal-day:not(.cal-day-empty)').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const date = btn.dataset.date;
+      if (selectedDates.has(date)) {
+        selectedDates.delete(date);
+        btn.classList.remove('selected');
+      } else {
+        selectedDates.add(date);
+        btn.classList.add('selected');
+      }
+      document.getElementById('f-select-count').textContent = selectedDates.size;
+    });
+  });
 }
 
 /* ============================================================

@@ -91,59 +91,60 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
 }
 .unit-amount { font-size: 1.05rem; font-weight: 700; color: var(--primary-dark); line-height: 1.4; }
 
-.staff-checklist {
+.calendar-picker {
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 18px 20px;
 }
-.staff-checklist-header {
+.calendar-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  font-size: 0.9rem;
-  color: var(--muted);
-  font-weight: 600;
-}
-.staff-checkbox-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 10px;
+  margin-bottom: 14px;
 }
-.staff-chip {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px 16px;
+.calendar-label {
   font-size: 1rem;
-  transition: background 0.15s, border-color 0.15s;
-}
-.staff-chip-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  user-select: none;
-}
-.staff-chip input { width: 20px; height: 20px; cursor: pointer; }
-.staff-chip:has(input:checked) {
-  background: #eef5f0;
-  border-color: var(--primary);
   font-weight: 700;
   color: var(--primary-dark);
+  min-width: 110px;
+  text-align: center;
 }
-.staff-role {
+.calendar-clear { margin-left: auto; }
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
   font-size: 0.8rem;
-  padding: 5px 4px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.cal-day {
+  aspect-ratio: 1;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
   color: var(--text);
-  font-weight: 400;
-  width: 100%;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cal-day:hover { border-color: var(--primary); }
+.cal-day.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 700;
+}
+.cal-day-empty {
+  border: none;
+  background: transparent;
+  cursor: default;
 }
 
 .note-field { margin-top: 16px; max-width: 400px; }

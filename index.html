@@ -24,8 +24,8 @@
     <form id="entry-form">
       <div class="form-grid form-grid-compact">
         <label class="field-group">
-          日付
-          <input type="date" id="f-date" required>
+          対象者
+          <select id="f-name"></select>
         </label>
 
         <label class="field-group">
@@ -33,6 +33,14 @@
           <select id="f-category">
             <option value="practice">通常練習</option>
             <option value="weekend">土日祝日活動</option>
+          </select>
+        </label>
+
+        <label class="field-group" id="group-role">
+          役割
+          <select id="f-role">
+            <option value="staff">スタッフ（500円）</option>
+            <option value="main_coach">メインコーチ（1,000円）</option>
           </select>
         </label>
 
@@ -58,12 +66,17 @@
         </div>
       </div>
 
-      <div class="staff-checklist">
-        <div class="staff-checklist-header">
-          <span>出席した対象者を選択</span>
-          <button type="button" id="f-select-all" class="btn-secondary">全員選択</button>
+      <div class="calendar-picker">
+        <div class="calendar-header">
+          <button type="button" id="cal-prev" class="btn-secondary">＜</button>
+          <span id="cal-label" class="calendar-label"></span>
+          <button type="button" id="cal-next" class="btn-secondary">＞</button>
+          <button type="button" id="cal-clear" class="btn-secondary calendar-clear">選択をクリア</button>
         </div>
-        <div id="staff-checkboxes" class="staff-checkbox-grid"></div>
+        <div class="calendar-weekdays">
+          <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+        </div>
+        <div id="cal-grid" class="calendar-grid"></div>
       </div>
 
       <label class="field-group note-field">
@@ -71,7 +84,7 @@
         <input type="text" id="f-note" placeholder="必要な場合のみ">
       </label>
 
-      <button type="submit" class="btn-primary">登録する（<span id="f-select-count">0</span>名）</button>
+      <button type="submit" class="btn-primary">登録する（<span id="f-select-count">0</span>日）</button>
     </form>
   </section>
 
