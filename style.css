@@ -272,9 +272,22 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
 }
 .contact-settings-body {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px;
   padding: 4px 0 18px;
+}
+.contact-person {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.contact-person legend {
+  padding: 0 6px;
+  font-weight: 700;
+  color: var(--primary-dark);
 }
 
 /* ============================================================

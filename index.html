@@ -111,11 +111,12 @@
         <span id="summary-count">0 名</span>
         <span>合計 <strong id="summary-total">¥0</strong></span>
         <span>支払予定日 <strong id="summary-paydate">-</strong></span>
+        <span>活動日数 <strong id="summary-active-days">0</strong> 日</span>
       </div>
     </div>
     <div class="table-wrap">
       <table class="sheet-table">
-        <thead><tr><th>氏名</th><th>月間支給額</th></tr></thead>
+        <thead><tr><th>氏名</th><th>月間支給額</th><th>稼働率</th></tr></thead>
         <tbody id="summary-tbody"></tbody>
       </table>
     </div>
@@ -124,13 +125,7 @@
 
     <details class="contact-settings">
       <summary>領収書用の連絡先・住所を設定（この端末にのみ保存されます）</summary>
-      <div class="contact-settings-body">
-        <label class="field-group">
-          住所（全員共通）
-          <input type="text" id="c-address" placeholder="例）陸前高田市高田町字中和野14-1">
-        </label>
-        <div id="contact-phone-list" class="contact-phone-list"></div>
-      </div>
+      <div class="contact-settings-body" id="contact-settings-body"></div>
     </details>
   </section>
 </main>

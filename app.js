@@ -91,10 +91,11 @@ function deleteRecord(id) {
 function loadContacts() {
   try {
     const raw = localStorage.getItem(CONTACTS_KEY);
-    return raw ? JSON.parse(raw) : { address: '', phones: {} };
+    const parsed = raw ? JSON.parse(raw) : {};
+    return { addresses: parsed.addresses || {}, phones: parsed.phones || {} };
   } catch (e) {
     console.error('failed to load contacts', e);
-    return { address: '', phones: {} };
+    return { addresses: {}, phones: {} };
   }
 }
 
@@ -324,6 +325,16 @@ function initList() {
 /* ============================================================
  * 月次集計
  * ============================================================ */
+function computeActivityStats(month) {
+  const filtered = records.filter((r) => monthKey(r.date) === month);
+  const activeDays = new Set(filtered.map((r) => r.date));
+  const daysByName = new Map(STAFF_NAMES.map((n) => [n, new Set()]));
+  filtered.forEach((r) => {
+    daysByName.get(r.name)?.add(r.date);
+  });
+  return { activeDays, daysByName };
+}
+
 function renderSummary() {
   const monthSel = document.getElementById('summary-month');
   populateMonthOptions('summary-month', monthSel.value, false);
@@ -335,19 +346,27 @@ function renderSummary() {
     byName.set(r.name, (byName.get(r.name) || 0) + (Number(r.amount) || 0));
   });
 
+  const { activeDays, daysByName } = computeActivityStats(month);
+  const activeDayCount = activeDays.size;
+
   const tbody = document.getElementById('summary-tbody');
   tbody.innerHTML = '';
   let total = 0;
   STAFF_NAMES.forEach((name) => {
     const amount = byName.get(name) || 0;
     total += amount;
+    const participatedDays = daysByName.get(name)?.size || 0;
+    const rateText = activeDayCount === 0
+      ? '-'
+      : `${participatedDays}/${activeDayCount}日（${Math.round((participatedDays / activeDayCount) * 100)}%）`;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(name)}</td><td class="num">${yen(amount)}</td>`;
+    tr.innerHTML = `<td>${escapeHtml(name)}</td><td class="num">${yen(amount)}</td><td class="num">${rateText}</td>`;
     tbody.appendChild(tr);
   });
 
   document.getElementById('summary-total').textContent = yen(total);
   document.getElementById('summary-count').textContent = STAFF_NAMES.length + ' 名';
+  document.getElementById('summary-active-days').textContent = activeDayCount;
 
   const payDate = nextPaymentDate(month);
   document.getElementById('summary-paydate').textContent = payDate;
@@ -373,28 +392,31 @@ function initSummary() {
 function initContactSettings() {
   const contacts = loadContacts();
 
-  const addressInput = document.getElementById('c-address');
-  addressInput.value = contacts.address || '';
-  addressInput.addEventListener('input', () => {
-    const c = loadContacts();
-    c.address = addressInput.value;
-    saveContacts(c);
-  });
-
-  const list = document.getElementById('contact-phone-list');
-  list.innerHTML = STAFF_NAMES.map(
+  const body = document.getElementById('contact-settings-body');
+  body.innerHTML = STAFF_NAMES.map(
     (name, i) => `
-    <label class="field-group">
-      ${escapeHtml(name)} の電話番号
-      <input type="text" id="c-phone-${i}" data-name="${escapeHtml(name)}" placeholder="080-0000-0000">
-    </label>`
+    <fieldset class="contact-person">
+      <legend>${escapeHtml(name)}</legend>
+      <label class="field-group">
+        住所
+        <input type="text" id="c-address-${i}" data-name="${escapeHtml(name)}" data-field="address" placeholder="例）陸前高田市高田町字中和野14-1">
+      </label>
+      <label class="field-group">
+        電話番号
+        <input type="text" id="c-phone-${i}" data-name="${escapeHtml(name)}" data-field="phone" placeholder="080-0000-0000">
+      </label>
+    </fieldset>`
   ).join('');
-  list.querySelectorAll('input').forEach((input) => {
+
+  body.querySelectorAll('input').forEach((input) => {
     const name = input.dataset.name;
-    input.value = contacts.phones[name] || '';
+    const field = input.dataset.field;
+    const store = field === 'address' ? contacts.addresses : contacts.phones;
+    input.value = store[name] || '';
     input.addEventListener('input', () => {
       const c = loadContacts();
-      c.phones[name] = input.value;
+      const target = field === 'address' ? c.addresses : c.phones;
+      target[name] = input.value;
       saveContacts(c);
     });
   });
@@ -437,7 +459,7 @@ function renderReceiptPrintArea(month, contacts, names) {
     .map((name) => {
       const data = buildReceiptData(name, month);
       const phone = contacts.phones[name] || '';
-      const address = contacts.address || '';
+      const address = contacts.addresses[name] || '';
       const rowCells = (row) => `
           <td class="rc-item-label">${escapeHtml(row.label)}</td>
           <td class="rc-num">${numFmt(row.unit)}</td>
