@@ -6,7 +6,13 @@
 const STAFF_NAMES = ['脇坂健吾', '小山裕介', '熊谷大輔', '今野和倫', '和田悠晟'];
 
 const RULES = {
-  practice: { label: '通常練習', amount: 500 },
+  practice: {
+    label: '通常練習',
+    roles: {
+      staff: { label: 'スタッフ', amount: 500 },
+      main_coach: { label: 'メインコーチ', amount: 1000 },
+    },
+  },
   weekend: {
     label: '土日祝日活動',
     table: {
@@ -19,13 +25,13 @@ const RULES = {
 const LOCATION_LABEL = { in: '気仙管内', out: '気仙管外' };
 const DURATION_LABEL = { half: '半日（4h以内）', full: '1日（4h超）' };
 
-const STORAGE_KEY = 'larus_expense_records_v2';
+const STORAGE_KEY = 'larus_expense_records_v3';
 
 /* ============================================================
  * 金額計算
  * ============================================================ */
-function calcUnitAmount(category, location, duration) {
-  if (category === 'practice') return RULES.practice.amount;
+function calcUnitAmount(category, { role, location, duration }) {
+  if (category === 'practice') return RULES.practice.roles[role]?.amount ?? RULES.practice.roles.staff.amount;
   if (category === 'weekend') return RULES.weekend.table[location]?.[duration] ?? 0;
   return 0;
 }
@@ -86,6 +92,9 @@ function describeEntry(entry) {
   if (entry.category === 'weekend') {
     return [LOCATION_LABEL[entry.location], DURATION_LABEL[entry.duration]].filter(Boolean).join(' / ');
   }
+  if (entry.category === 'practice') {
+    return RULES.practice.roles[entry.role]?.label ?? '';
+  }
   return '';
 }
 
@@ -120,6 +129,7 @@ function initForm() {
 
   categorySel.addEventListener('change', () => {
     updateConditionalFields();
+    updateRoleSelectVisibility();
     updateUnitAmount();
   });
   document.getElementById('f-location').addEventListener('change', updateUnitAmount);
@@ -133,45 +143,63 @@ function initForm() {
   });
 
   updateConditionalFields();
+  updateRoleSelectVisibility();
   updateUnitAmount();
   updateSelectedCount();
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const checked = [...document.querySelectorAll('.staff-checkbox:checked')].map((b) => b.value);
-    if (checked.length === 0) {
+    const checkedBoxes = [...document.querySelectorAll('.staff-checkbox:checked')];
+    if (checkedBoxes.length === 0) {
       alert('対象者を1名以上選択してください');
       return;
     }
     const category = categorySel.value;
     const location = document.getElementById('f-location').value;
     const duration = document.getElementById('f-duration').value;
-    const amount = calcUnitAmount(category, location, duration);
     const note = document.getElementById('f-note').value;
     const date = dateInput.value;
 
-    checked.forEach((name) => {
-      addRecord({ date, name, category, location, duration, amount, note });
+    checkedBoxes.forEach((cb) => {
+      const name = cb.value;
+      const roleSelect = document.getElementById(cb.dataset.roleId);
+      const role = roleSelect ? roleSelect.value : undefined;
+      const amount = calcUnitAmount(category, { role, location, duration });
+      addRecord({ date, name, category, role, location, duration, amount, note });
     });
     persist();
 
     document.querySelectorAll('.staff-checkbox').forEach((b) => (b.checked = false));
+    document.querySelectorAll('.staff-role').forEach((s) => (s.value = 'staff'));
     document.getElementById('f-note').value = '';
     updateSelectedCount();
-    showToast(`${checked.length}名分を登録しました`);
+    showToast(`${checkedBoxes.length}名分を登録しました`);
   });
 }
 
 function renderStaffCheckboxes() {
   const wrap = document.getElementById('staff-checkboxes');
-  wrap.innerHTML = STAFF_NAMES.map(
-    (name, i) => `
-    <label class="staff-chip">
-      <input type="checkbox" class="staff-checkbox" value="${escapeHtml(name)}" id="staff-cb-${i}">
-      <span>${escapeHtml(name)}</span>
-    </label>`
-  ).join('');
+  wrap.innerHTML = STAFF_NAMES.map((name, i) => {
+    const roleId = `staff-role-${i}`;
+    return `
+    <div class="staff-chip">
+      <label class="staff-chip-main">
+        <input type="checkbox" class="staff-checkbox" value="${escapeHtml(name)}" id="staff-cb-${i}" data-role-id="${roleId}">
+        <span>${escapeHtml(name)}</span>
+      </label>
+      <select class="staff-role" id="${roleId}">
+        <option value="staff">スタッフ（500円）</option>
+        <option value="main_coach">メインコーチ（1,000円）</option>
+      </select>
+    </div>`;
+  }).join('');
   wrap.querySelectorAll('.staff-checkbox').forEach((cb) => cb.addEventListener('change', updateSelectedCount));
+}
+
+function updateRoleSelectVisibility() {
+  const category = document.getElementById('f-category').value;
+  const show = category === 'practice';
+  document.querySelectorAll('.staff-role').forEach((s) => (s.style.display = show ? '' : 'none'));
 }
 
 function updateSelectedCount() {
@@ -188,10 +216,15 @@ function updateConditionalFields() {
 
 function updateUnitAmount() {
   const category = document.getElementById('f-category').value;
+  const box = document.getElementById('f-unit-amount');
+  if (category === 'practice') {
+    box.textContent = `スタッフ ${yen(RULES.practice.roles.staff.amount)} / メインコーチ ${yen(RULES.practice.roles.main_coach.amount)}`;
+    return;
+  }
   const location = document.getElementById('f-location').value;
   const duration = document.getElementById('f-duration').value;
-  const amount = calcUnitAmount(category, location, duration);
-  document.getElementById('f-unit-amount').textContent = yen(amount) + ' / 人';
+  const amount = calcUnitAmount(category, { location, duration });
+  box.textContent = yen(amount) + ' / 人';
 }
 
 /* ============================================================
