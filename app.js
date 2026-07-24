@@ -4,6 +4,7 @@
  * 支給ルール（KESEN LARUS BASKETBALL CLUB 交通費等及び謝礼金支給規程 第3条・第4条）
  * ============================================================ */
 const STAFF_NAMES = ['脇坂健吾', '小山裕介', '熊谷大輔', '今野和倫', '和田悠晟'];
+const DEFAULT_ROLE = { 脇坂健吾: 'main_coach' };
 
 const RULES = {
   practice: {
@@ -170,7 +171,7 @@ function initForm() {
     persist();
 
     document.querySelectorAll('.staff-checkbox').forEach((b) => (b.checked = false));
-    document.querySelectorAll('.staff-role').forEach((s) => (s.value = 'staff'));
+    document.querySelectorAll('.staff-role').forEach((s) => (s.value = s.dataset.defaultRole));
     document.getElementById('f-note').value = '';
     updateSelectedCount();
     showToast(`${checkedBoxes.length}名分を登録しました`);
@@ -181,15 +182,16 @@ function renderStaffCheckboxes() {
   const wrap = document.getElementById('staff-checkboxes');
   wrap.innerHTML = STAFF_NAMES.map((name, i) => {
     const roleId = `staff-role-${i}`;
+    const defaultRole = DEFAULT_ROLE[name] ?? 'staff';
     return `
     <div class="staff-chip">
       <label class="staff-chip-main">
         <input type="checkbox" class="staff-checkbox" value="${escapeHtml(name)}" id="staff-cb-${i}" data-role-id="${roleId}">
         <span>${escapeHtml(name)}</span>
       </label>
-      <select class="staff-role" id="${roleId}">
-        <option value="staff">スタッフ（500円）</option>
-        <option value="main_coach">メインコーチ（1,000円）</option>
+      <select class="staff-role" id="${roleId}" data-default-role="${defaultRole}">
+        <option value="staff"${defaultRole === 'staff' ? ' selected' : ''}>スタッフ（500円）</option>
+        <option value="main_coach"${defaultRole === 'main_coach' ? ' selected' : ''}>メインコーチ（1,000円）</option>
       </select>
     </div>`;
   }).join('');
