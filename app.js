@@ -417,8 +417,14 @@ function renderCalendar() {
 /* ============================================================
  * 一覧（スプレッドシート風）
  * ============================================================ */
+let listMonthFilterTouched = false;
+
 function renderList() {
-  const monthFilter = document.getElementById('list-month-filter').value;
+  let monthFilter = document.getElementById('list-month-filter').value;
+  if (!listMonthFilterTouched) {
+    const months = [...new Set(records.map((r) => monthKey(r.date)))].sort().reverse();
+    monthFilter = months[0] || monthKey(new Date().toISOString());
+  }
   const nameFilter = document.getElementById('list-name-filter').value.trim();
 
   const filtered = records
@@ -477,7 +483,10 @@ function populateMonthOptions(selectId, current, includeAllOption) {
 }
 
 function initList() {
-  document.getElementById('list-month-filter').addEventListener('change', renderList);
+  document.getElementById('list-month-filter').addEventListener('change', () => {
+    listMonthFilterTouched = true;
+    renderList();
+  });
   document.getElementById('list-name-filter').addEventListener('input', renderList);
 }
 
