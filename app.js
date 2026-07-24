@@ -384,6 +384,7 @@ function initSummary() {
   document.getElementById('summary-month').addEventListener('change', renderSummary);
   initContactSettings();
   document.getElementById('btn-receipt-pdf').addEventListener('click', handleReceiptPdfClick);
+  document.getElementById('btn-sashikomi-export').addEventListener('click', handleSashikomiExportClick);
 }
 
 /* ============================================================
@@ -507,6 +508,44 @@ function renderReceiptPrintArea(month, contacts, names) {
       </div>`;
     })
     .join('');
+}
+
+/* ============================================================
+ * 差込シート形式でのExcel出力（連絡先・住所列は含めない）
+ * ============================================================ */
+const SASHIKOMI_HEADER = ['No.', '支払月', '名前', '金額', 'メイン', 'サブ', '土日(半日・内)', '土日(全日・内)', '土日(半日・外)', '土日(全日・外)', '支払', '確認'];
+
+function buildSashikomiRows() {
+  const months = [...new Set(records.map((r) => monthKey(r.date)))].filter(Boolean).sort();
+  const rows = [];
+  let no = 1;
+  months.forEach((month) => {
+    STAFF_NAMES.forEach((name) => {
+      const data = buildReceiptData(name, month);
+      const confirmTotal = data.rows.reduce((sum, row) => sum + row.unit * row.count, 0);
+      rows.push([
+        no++,
+        formatEraMonth(month),
+        name,
+        data.total,
+        ...data.rows.map((row) => row.count),
+        '',
+        confirmTotal,
+      ]);
+    });
+  });
+  return rows;
+}
+
+function handleSashikomiExportClick() {
+  if (records.length === 0) {
+    alert('出力できる記録がありません');
+    return;
+  }
+  const rows = buildSashikomiRows();
+  const bytes = buildXlsxFile('差込', SASHIKOMI_HEADER, rows);
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  downloadBytes(bytes, `交通費_差込データ_${today}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 
 function handleReceiptPdfClick() {

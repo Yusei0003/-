@@ -121,7 +121,10 @@
       </table>
     </div>
 
-    <button type="button" id="btn-receipt-pdf" class="btn-primary receipt-pdf-btn">領収書をPDF出力（対象月・印刷ダイアログでPDF保存）</button>
+    <div class="summary-action-row">
+      <button type="button" id="btn-receipt-pdf" class="btn-primary receipt-pdf-btn">領収書をPDF出力（対象月・印刷ダイアログでPDF保存）</button>
+      <button type="button" id="btn-sashikomi-export" class="btn-secondary sashikomi-btn">差込データをExcel出力（全期間）</button>
+    </div>
 
     <details class="contact-settings">
       <summary>領収書用の連絡先・住所を設定（この端末にのみ保存されます）</summary>
@@ -133,6 +136,7 @@
 <div id="toast" class="toast"></div>
 <div id="receipt-print-area" class="receipt-print-area"></div>
 
+<script src="xlsx-writer.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
