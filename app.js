@@ -26,9 +26,6 @@ const RULES = {
 const LOCATION_LABEL = { in: '気仙管内', out: '気仙管外' };
 const DURATION_LABEL = { half: '半日（4h以内）', full: '1日（4h超）' };
 
-const STORAGE_KEY = 'larus_expense_records_v3';
-const CONTACTS_KEY = 'larus_receipt_contacts_v1';
-
 /* 交通費受領書の明細行（KESEN LARUS所定様式の並び順） */
 const RECEIPT_ROWS = [
   { label: '練習(メイン)', unit: 1000, match: (r) => r.category === 'practice' && r.role === 'main_coach' },
@@ -49,58 +46,49 @@ function calcUnitAmount(category, { role, location, duration }) {
 }
 
 /* ============================================================
- * データストア
+ * データストア（Firestoreに保存。window.FirebaseDataはfirebase-bundle.jsが用意する）
  * ============================================================ */
-function loadRecords() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.error('failed to load records', e);
-    return [];
-  }
-}
-
-function saveRecords(records) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-}
-
-let records = loadRecords();
+let records = [];
+let pendingRecords = [];
+let contactsCache = { addresses: {}, phones: {} };
 
 function addRecord(record) {
-  record.id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-  records.push(record);
+  pendingRecords.push(record);
 }
 
 function persist() {
-  saveRecords(records);
+  if (pendingRecords.length === 0) return;
+  const batch = pendingRecords;
+  pendingRecords = [];
+  window.FirebaseData.addRecords(batch).catch((err) => {
+    console.error('addRecords failed', err);
+    alert('登録に失敗しました: ' + err.message);
+  });
 }
 
 function updateRecord(id, patch) {
-  const idx = records.findIndex((r) => r.id === id);
-  if (idx === -1) return;
-  records[idx] = { ...records[idx], ...patch };
-  saveRecords(records);
+  window.FirebaseData.updateRecord(id, patch).catch((err) => {
+    console.error('updateRecord failed', err);
+    alert('更新に失敗しました: ' + err.message);
+  });
 }
 
 function deleteRecord(id) {
-  records = records.filter((r) => r.id !== id);
-  saveRecords(records);
+  window.FirebaseData.deleteRecord(id).catch((err) => {
+    console.error('deleteRecord failed', err);
+    alert('削除に失敗しました: ' + err.message);
+  });
 }
 
 function loadContacts() {
-  try {
-    const raw = localStorage.getItem(CONTACTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return { addresses: parsed.addresses || {}, phones: parsed.phones || {} };
-  } catch (e) {
-    console.error('failed to load contacts', e);
-    return { addresses: {}, phones: {} };
-  }
+  return contactsCache;
 }
 
 function saveContacts(contacts) {
-  localStorage.setItem(CONTACTS_KEY, JSON.stringify(contacts));
+  window.FirebaseData.saveContacts(contacts).catch((err) => {
+    console.error('saveContacts failed', err);
+    alert('連絡先の保存に失敗しました: ' + err.message);
+  });
 }
 
 function yen(n) {
@@ -655,9 +643,6 @@ function handleImportCsv(text) {
   });
 
   persist();
-  renderList();
-  renderSummary();
-  renderDashboard();
 
   const resultLines = [`${added}件を追加しました`];
   if (duplicated > 0) resultLines.push(`（重複のためスキップ: ${duplicated}件）`);
@@ -670,8 +655,6 @@ function handleImportCsv(text) {
  * 連絡先設定（この端末のlocalStorageにのみ保存。リポジトリには含めない）
  * ============================================================ */
 function initContactSettings() {
-  const contacts = loadContacts();
-
   const body = document.getElementById('contact-settings-body');
   body.innerHTML = STAFF_NAMES.map(
     (name, i) => `
@@ -691,14 +674,23 @@ function initContactSettings() {
   body.querySelectorAll('input').forEach((input) => {
     const name = input.dataset.name;
     const field = input.dataset.field;
-    const store = field === 'address' ? contacts.addresses : contacts.phones;
-    input.value = store[name] || '';
     input.addEventListener('input', () => {
-      const c = loadContacts();
-      const target = field === 'address' ? c.addresses : c.phones;
+      const target = field === 'address' ? contactsCache.addresses : contactsCache.phones;
       target[name] = input.value;
-      saveContacts(c);
+      saveContacts(contactsCache);
     });
+  });
+
+  refreshContactInputs();
+}
+
+function refreshContactInputs() {
+  document.querySelectorAll('#contact-settings-body input').forEach((input) => {
+    if (document.activeElement === input) return; // 入力中の欄は上書きしない
+    const name = input.dataset.name;
+    const field = input.dataset.field;
+    const store = field === 'address' ? contactsCache.addresses : contactsCache.phones;
+    input.value = store[name] || '';
   });
 }
 
@@ -1063,6 +1055,76 @@ function renderStaffChart(data) {
 }
 
 /* ============================================================
+ * 認証（共有の合言葉でFirebase Authenticationにログイン）
+ * ============================================================ */
+function rerenderAll() {
+  renderList();
+  renderSummary();
+  renderDashboard();
+  renderCalendar();
+}
+
+function initAuth() {
+  const loginForm = document.getElementById('login-form');
+  const loginPin = document.getElementById('login-pin');
+  const loginError = document.getElementById('login-error');
+  const loginStatus = document.getElementById('login-status');
+  const logoutBtn = document.getElementById('btn-logout');
+
+  let unsubscribeRecords = null;
+  let unsubscribeContacts = null;
+
+  window.FirebaseData.onAuthChange((user) => {
+    loginStatus.style.display = 'none';
+
+    if (user) {
+      document.body.classList.remove('auth-locked');
+      loginError.textContent = '';
+      loginPin.value = '';
+      if (!unsubscribeRecords) {
+        unsubscribeRecords = window.FirebaseData.subscribeRecords((recs) => {
+          records = recs;
+          rerenderAll();
+        });
+      }
+      if (!unsubscribeContacts) {
+        unsubscribeContacts = window.FirebaseData.subscribeContacts((c) => {
+          contactsCache = c;
+          refreshContactInputs();
+        });
+      }
+    } else {
+      document.body.classList.add('auth-locked');
+      if (unsubscribeRecords) {
+        unsubscribeRecords();
+        unsubscribeRecords = null;
+      }
+      if (unsubscribeContacts) {
+        unsubscribeContacts();
+        unsubscribeContacts = null;
+      }
+      records = [];
+      contactsCache = { addresses: {}, phones: {} };
+    }
+  });
+
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const pin = loginPin.value;
+    if (!pin) return;
+    loginError.textContent = '';
+    window.FirebaseData.signIn(pin).catch((err) => {
+      console.error('signIn failed', err);
+      loginError.textContent = '合言葉が正しくありません';
+    });
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    window.FirebaseData.signOut();
+  });
+}
+
+/* ============================================================
  * 初期化
  * ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
@@ -1071,7 +1133,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initList();
   initSummary();
   initDashboard();
-  renderList();
-  renderSummary();
-  renderDashboard();
+  initAuth();
 });

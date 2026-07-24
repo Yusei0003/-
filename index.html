@@ -6,10 +6,22 @@
 <title>交通費・謝礼金 取りまとめ | KESEN LARUS BASKETBALL CLUB</title>
 <link rel="stylesheet" href="style.css?v=20260724102850">
 </head>
-<body>
+<body class="auth-locked">
+<div id="login-overlay" class="login-overlay">
+  <form id="login-form" class="login-form">
+    <h2>交通費・謝礼金 取りまとめ</h2>
+    <p class="login-hint">合言葉を入力してください</p>
+    <input type="password" id="login-pin" placeholder="合言葉" autocomplete="current-password" autofocus>
+    <button type="submit" class="btn-primary">ログイン</button>
+    <div id="login-error" class="login-error"></div>
+    <div id="login-status" class="login-status">確認中...</div>
+  </form>
+</div>
+
 <header class="app-header">
   <h1>交通費・謝礼金 取りまとめ</h1>
   <p class="subtitle">KESEN LARUS BASKETBALL CLUB 交通費等及び謝礼金支給規程 対応</p>
+  <button type="button" id="btn-logout" class="logout-btn">ログアウト</button>
 </header>
 
 <nav class="tabs">
@@ -208,6 +220,7 @@
 <div id="receipt-print-area" class="receipt-print-area"></div>
 <div id="chart-tooltip" class="chart-tooltip"></div>
 
+<script src="firebase-bundle.js?v=20260724102850"></script>
 <script src="xlsx-writer.js?v=20260724102850"></script>
 <script src="app.js?v=20260724102850"></script>
 </body>

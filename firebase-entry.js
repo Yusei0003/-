@@ -1,0 +1,101 @@
+import { initializeApp } from 'firebase/app';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
+} from 'firebase/auth';
+import {
+  getFirestore,
+  collection,
+  doc,
+  onSnapshot,
+  updateDoc,
+  deleteDoc,
+  setDoc,
+  writeBatch,
+} from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: 'AIzaSyABZUbOh9JXD84Z4xcA6_OQCfxlHXm-JOc',
+  authDomain: 'larus-875e6.firebaseapp.com',
+  projectId: 'larus-875e6',
+  storageBucket: 'larus-875e6.firebasestorage.app',
+  messagingSenderId: '629328903991',
+  appId: '1:629328903991:web:3355f7d00fdc90f86324b2',
+};
+
+const SHARED_EMAIL = 'rktkbsk.pg831@gmail.com';
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+setPersistence(auth, browserLocalPersistence).catch(() => {});
+
+const recordsCol = collection(db, 'records');
+const contactsDocRef = doc(db, 'contacts', 'main');
+
+function fsDocToRecord(d) {
+  return { id: d.id, ...d.data() };
+}
+
+window.FirebaseData = {
+  onAuthChange(cb) {
+    return onAuthStateChanged(auth, cb);
+  },
+  async signIn(password) {
+    await signInWithEmailAndPassword(auth, SHARED_EMAIL, password);
+  },
+  async signOut() {
+    await signOut(auth);
+  },
+  subscribeRecords(cb) {
+    return onSnapshot(
+      recordsCol,
+      (snap) => cb(snap.docs.map(fsDocToRecord)),
+      (err) => console.error('records subscription error', err)
+    );
+  },
+  async addRecords(records) {
+    const chunks = [];
+    for (let i = 0; i < records.length; i += 450) {
+      chunks.push(records.slice(i, i + 450));
+    }
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      chunk.forEach((r) => {
+        const ref = doc(recordsCol);
+        const data = {};
+        Object.keys(r).forEach((k) => {
+          if (r[k] !== undefined) data[k] = r[k];
+        });
+        batch.set(ref, data);
+      });
+      await batch.commit();
+    }
+  },
+  async updateRecord(id, patch) {
+    await updateDoc(doc(recordsCol, id), patch);
+  },
+  async deleteRecord(id) {
+    await deleteDoc(doc(recordsCol, id));
+  },
+  subscribeContacts(cb) {
+    return onSnapshot(
+      contactsDocRef,
+      (snap) => {
+        const data = snap.exists() ? snap.data() : {};
+        cb({ addresses: data.addresses || {}, phones: data.phones || {} });
+      },
+      (err) => console.error('contacts subscription error', err)
+    );
+  },
+  async saveContacts(contacts) {
+    await setDoc(contactsDocRef, contacts);
+  },
+};
+
+window.dispatchEvent(new Event('firebasedata-ready'));
