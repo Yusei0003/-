@@ -1073,9 +1073,35 @@ function initAuth() {
 
   let unsubscribeRecords = null;
   let unsubscribeContacts = null;
+  let autoLoginAttempted = false;
+
+  const urlKey = new URLSearchParams(location.search).get('key');
+  if (urlKey) {
+    loginStatus.textContent = '自動ログイン中...';
+  }
+
+  function tryAutoLogin() {
+    if (autoLoginAttempted || !urlKey) return;
+    autoLoginAttempted = true;
+    window.FirebaseData.signIn(urlKey)
+      .then(() => {
+        // URLバーに合言葉が残らないよう、ログイン後に取り除く
+        history.replaceState(null, '', location.pathname + location.hash);
+      })
+      .catch((err) => {
+        console.error('auto signIn failed', err);
+        loginError.textContent = 'URLの合言葉が正しくありません。手動で入力してください';
+      });
+  }
 
   window.FirebaseData.onAuthChange((user) => {
     loginStatus.style.display = 'none';
+
+    if (!user) {
+      // signIn()が同じonAuthChangeコールバックを同期的に再入呼び出しするため、
+      // 今回のコールバック処理が完了してから実行する
+      setTimeout(tryAutoLogin, 0);
+    }
 
     if (user) {
       document.body.classList.remove('auth-locked');
