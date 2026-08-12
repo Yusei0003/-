@@ -542,6 +542,7 @@ function initSummary() {
   document.getElementById('btn-receipt-pdf').addEventListener('click', handleReceiptPdfClick);
   document.getElementById('btn-sashikomi-export').addEventListener('click', handleSashikomiExportClick);
   initImport();
+  initEnvelope();
 }
 
 /* ============================================================
@@ -836,6 +837,106 @@ function handleReceiptPdfClick() {
 }
 
 /* ============================================================
+ * 封筒印刷（長形3号・120x235mm、対象期間内に交通費の記録がある全員分）
+ * ============================================================ */
+function reiwaYearOf(y) {
+  return y - 2018;
+}
+
+/* 単月なら「令和8年7月分」、複数月かつ同じ年度内なら「令和8年4月〜7月分」、
+ * 年をまたぐ場合は「令和7年12月〜令和8年3月分」のように両方の年を表記する */
+function formatEnvelopePeriod(startMonth, endMonth) {
+  const [sy, sm] = startMonth.split('-').map(Number);
+  const [ey, em] = endMonth.split('-').map(Number);
+  if (startMonth === endMonth) return `令和${reiwaYearOf(sy)}年${sm}月分`;
+  if (sy === ey) return `令和${reiwaYearOf(sy)}年${sm}月〜${em}月分`;
+  return `令和${reiwaYearOf(sy)}年${sm}月〜令和${reiwaYearOf(ey)}年${em}月分`;
+}
+
+function populateEnvelopeMonthOptions() {
+  populateMonthOptions('env-start-month', document.getElementById('env-start-month').value, false);
+  populateMonthOptions('env-end-month', document.getElementById('env-end-month').value, false);
+}
+
+function buildEnvelopeEntries(startMonth, endMonth) {
+  const totals = new Map(STAFF_NAMES.map((n) => [n, 0]));
+  records
+    .filter((r) => {
+      const mk = monthKey(r.date);
+      return mk >= startMonth && mk <= endMonth;
+    })
+    .forEach((r) => {
+      totals.set(r.name, (totals.get(r.name) || 0) + (Number(r.amount) || 0));
+    });
+  return STAFF_NAMES.map((name) => ({ name, total: totals.get(name) || 0 })).filter((e) => e.total > 0);
+}
+
+function renderEnvelopePrintArea(entries, period) {
+  const area = document.getElementById('envelope-print-area');
+  area.innerHTML = entries
+    .map(
+      (e) => `
+      <div class="envelope-page">
+        <div class="env-top">
+          <img class="env-logo" src="logo.png" alt="KESEN LARUS BASKETBALL CLUB">
+          <div class="env-logo-rule"></div>
+        </div>
+        <div class="env-mid">
+          <div class="env-name-block"><div class="env-name">${escapeHtml(formatDisplayName(e.name))}<span class="sama">様</span></div></div>
+          <div class="env-period-block">
+            <span class="env-label">対象期間</span>
+            <div class="env-period">${escapeHtml(period)}</div>
+            <div class="env-fee-type">交通費</div>
+          </div>
+          <div class="env-amount-block"><span class="env-amount-num">${numFmt(e.total)}</span><span class="env-amount-unit">円</span></div>
+        </div>
+        <div class="env-footer">KESEN LARUS BASKETBALL CLUB</div>
+      </div>`
+    )
+    .join('');
+}
+
+/* 封筒は120x235mmの長形3号だが、受領書PDF(A4想定)と@pageサイズが競合するため、
+ * 印刷直前だけ動的にスタイルを差し込み、印刷後に取り除く */
+function printWithEnvelopePageSize() {
+  const style = document.createElement('style');
+  style.textContent = '@page { size: 120mm 235mm; margin: 0; }';
+  document.head.appendChild(style);
+  const cleanup = () => {
+    style.remove();
+    window.removeEventListener('afterprint', cleanup);
+  };
+  window.addEventListener('afterprint', cleanup);
+  setTimeout(cleanup, 60000);
+  window.print();
+}
+
+function handleEnvelopePrintClick() {
+  const start = document.getElementById('env-start-month').value;
+  const end = document.getElementById('env-end-month').value;
+  if (!start || !end) {
+    alert('開始月・終了月を選択してください');
+    return;
+  }
+  if (start > end) {
+    alert('開始月は終了月と同じか、それより前の月を選択してください');
+    return;
+  }
+  const entries = buildEnvelopeEntries(start, end);
+  if (entries.length === 0) {
+    alert('指定した期間に交通費の支給記録がありません');
+    return;
+  }
+  renderEnvelopePrintArea(entries, formatEnvelopePeriod(start, end));
+  printWithEnvelopePageSize();
+}
+
+function initEnvelope() {
+  populateEnvelopeMonthOptions();
+  document.getElementById('btn-envelope-print').addEventListener('click', handleEnvelopePrintClick);
+}
+
+/* ============================================================
  * ユーティリティ
  * ============================================================ */
 function escapeHtml(s) {
@@ -1062,6 +1163,7 @@ function rerenderAll() {
   renderSummary();
   renderDashboard();
   renderCalendar();
+  populateEnvelopeMonthOptions();
 }
 
 function initAuth() {
