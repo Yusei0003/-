@@ -565,20 +565,11 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
 }
 .receipt-page:last-child { page-break-after: auto; }
 
-.receipt-logo {
-  text-align: center;
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #1c4e8a;
-  letter-spacing: 0.05em;
-  margin-bottom: 6px;
-}
-.receipt-logo-sub {
+.receipt-logo-img {
   display: block;
-  font-size: 0.6rem;
-  font-weight: 600;
-  letter-spacing: 0.15em;
-  color: #444;
+  margin: 0 auto 10px;
+  width: 150px;
+  height: auto;
 }
 
 .receipt-title-bar {

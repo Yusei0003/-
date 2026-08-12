@@ -746,7 +746,7 @@ function renderReceiptPrintArea(month, contacts, names) {
 
       return `
       <div class="receipt-page">
-        <div class="receipt-logo">KESEN LARUS<span class="receipt-logo-sub">BASKETBALL CLUB</span></div>
+        <img class="receipt-logo-img" src="logo.png" alt="KESEN LARUS BASKETBALL CLUB">
         <div class="receipt-title-bar">
           <span>${escapeHtml(eraMonth)} 月分</span><span>交通費受領書</span>
         </div>
