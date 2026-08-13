@@ -542,6 +542,7 @@ function initSummary() {
   document.getElementById('btn-receipt-pdf').addEventListener('click', handleReceiptPdfClick);
   document.getElementById('btn-sashikomi-export').addEventListener('click', handleSashikomiExportClick);
   initImport();
+  initMonthlyCountImport();
   initEnvelope();
 }
 
@@ -549,7 +550,8 @@ function initSummary() {
  * 過去データのCSVインポート
  * ============================================================ */
 function parseCsv(text) {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter((l) => l.length > 0);
+  const stripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const lines = stripped.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter((l) => l.length > 0);
   return lines.map((line) => {
     const cells = [];
     let cur = '';
@@ -588,6 +590,128 @@ function initImport() {
     reader.readAsText(file, 'utf-8');
     e.target.value = '';
   });
+}
+
+/* ============================================================
+ * 月別の回数からの一括インポート（日付ごとの出欠が不明な過去データ用）
+ * 支払月,名前,金額,メイン,サブ,土日(半日・内),土日(全日・内),土日(半日・外),土日(全日・外)
+ * ============================================================ */
+const MONTHLY_COUNT_COLUMNS = [
+  { header: 'メイン', category: 'practice', role: 'main_coach', amount: 1000 },
+  { header: 'サブ', category: 'practice', role: 'staff', amount: 500 },
+  { header: '土日(半日・内)', category: 'weekend', location: 'in', duration: 'half', amount: 1000 },
+  { header: '土日(全日・内)', category: 'weekend', location: 'in', duration: 'full', amount: 1500 },
+  { header: '土日(半日・外)', category: 'weekend', location: 'out', duration: 'half', amount: 2000 },
+  { header: '土日(全日・外)', category: 'weekend', location: 'out', duration: 'full', amount: 3000 },
+];
+
+function parseReiwaMonth(str) {
+  const m = String(str ?? '').trim().match(/^R(\d+)\.(\d{1,2})$/);
+  if (!m) return null;
+  const reiwaYear = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return null;
+  return { year: reiwaYear + 2018, month };
+}
+
+function daysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function initMonthlyCountImport() {
+  document.getElementById('monthly-import-file').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => handleMonthlyCountImportCsv(String(reader.result));
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  });
+}
+
+function handleMonthlyCountImportCsv(text) {
+  const resultEl = document.getElementById('monthly-import-result');
+  const rows = parseCsv(text);
+  if (rows.length === 0) {
+    resultEl.textContent = 'ファイルが空です';
+    return;
+  }
+  const header = rows[0].map((h) => h.trim());
+  const idx = (name) => header.indexOf(name);
+  const iMonth = idx('支払月');
+  const iName = idx('名前');
+  const iAmount = idx('金額');
+  const columns = MONTHLY_COUNT_COLUMNS.map((c) => ({ ...c, idx: idx(c.header) }));
+
+  if (iMonth === -1 || iName === -1) {
+    resultEl.textContent = 'CSVの形式が正しくありません（支払月・名前の列が必要です）';
+    return;
+  }
+
+  let added = 0;
+  let duplicated = 0;
+  let invalid = 0;
+  const mismatchLines = [];
+
+  rows.slice(1).forEach((cells) => {
+    if (cells.length < 2) return;
+    const monthStr = cells[iMonth]?.trim();
+    const name = cells[iName]?.trim();
+    const period = parseReiwaMonth(monthStr);
+    if (!period || !STAFF_NAMES.includes(name)) {
+      invalid++;
+      return;
+    }
+
+    const entries = [];
+    columns.forEach((c) => {
+      if (c.idx === -1) return;
+      const count = Number(cells[c.idx]);
+      if (!Number.isFinite(count) || count <= 0) return;
+      for (let i = 0; i < count; i++) {
+        entries.push({ category: c.category, role: c.role, location: c.location, duration: c.duration, amount: c.amount });
+      }
+    });
+    if (entries.length === 0) {
+      invalid++;
+      return;
+    }
+
+    const computedTotal = entries.reduce((sum, e) => sum + e.amount, 0);
+    const statedAmount = iAmount !== -1 ? Number(cells[iAmount]) : NaN;
+    if (Number.isFinite(statedAmount) && statedAmount !== computedTotal) {
+      mismatchLines.push(`${monthStr} ${name}: 記載${statedAmount}円 / 計算${computedTotal}円`);
+    }
+
+    const dim = daysInMonth(period.year, period.month);
+    const mm = String(period.month).padStart(2, '0');
+    entries.forEach((e, i) => {
+      const day = (i % dim) + 1;
+      const date = `${period.year}-${mm}-${String(day).padStart(2, '0')}`;
+      const isDuplicate = records.some(
+        (r) => r.date === date && r.name === name && r.category === e.category && r.role === e.role && r.location === e.location && r.duration === e.duration && Number(r.amount) === e.amount
+      );
+      if (isDuplicate) {
+        duplicated++;
+        return;
+      }
+      addRecord({ date, name, category: e.category, role: e.role, location: e.location, duration: e.duration, amount: e.amount, note: '月別回数取込（仮の日付）' });
+      added++;
+    });
+  });
+
+  persist();
+
+  const resultLines = [`${added}件を追加しました`];
+  if (duplicated > 0) resultLines.push(`（重複のためスキップ: ${duplicated}件）`);
+  if (invalid > 0) resultLines.push(`（形式不正のためスキップ: ${invalid}行）`);
+  if (mismatchLines.length > 0) {
+    const shown = mismatchLines.slice(0, 5).join(' / ');
+    const more = mismatchLines.length > 5 ? ` 他${mismatchLines.length - 5}件` : '';
+    resultLines.push(`（金額不一致: ${shown}${more}）`);
+  }
+  resultEl.textContent = resultLines.join(' ');
+  showToast(`${added}件をインポートしました`);
 }
 
 function handleImportCsv(text) {
