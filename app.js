@@ -849,6 +849,7 @@ function buildReceiptData(name, month) {
 }
 
 function renderReceiptPrintArea(month, contacts, names) {
+  document.getElementById('envelope-print-area').innerHTML = '';
   const area = document.getElementById('receipt-print-area');
   const eraMonth = formatEraMonth(month);
 
@@ -996,6 +997,7 @@ function buildEnvelopeEntries(startMonth, endMonth) {
 }
 
 function renderEnvelopePrintArea(entries, period) {
+  document.getElementById('receipt-print-area').innerHTML = '';
   const area = document.getElementById('envelope-print-area');
   area.innerHTML = entries
     .map(
