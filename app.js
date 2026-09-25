@@ -848,63 +848,102 @@ function buildReceiptData(name, month) {
   return { name, rows, total };
 }
 
+function toFullWidthLabel(label) {
+  return label.replace('(', '（').replace(')', '）');
+}
+
 function renderReceiptPrintArea(month, contacts, names) {
   document.getElementById('envelope-print-area').innerHTML = '';
   const area = document.getElementById('receipt-print-area');
-  const eraMonth = formatEraMonth(month);
+  const [y, m] = month.split('-').map(Number);
 
   area.innerHTML = names
     .map((name) => {
       const data = buildReceiptData(name, month);
       const phone = contacts.phones[name] || '';
       const address = contacts.addresses[name] || '';
-      const rowCells = (row) => `
-          <td class="rc-item-label">${escapeHtml(row.label)}</td>
-          <td class="rc-num">${numFmt(row.unit)}</td>
-          <td class="rc-op">×</td>
-          <td class="rc-num">${row.count} 回</td>
-          <td class="rc-op">=</td>
-          <td class="rc-num rc-row-amount">${numFmt(row.amount)} 円</td>`;
-      const restRowsHtml = data.rows
-        .slice(1)
-        .map((row) => `<tr>${rowCells(row)}</tr>`)
+      const detailRows = data.rows
+        .map(
+          (row) => `
+          <tr class="${row.count === 0 ? 'rc-zero' : ''}">
+            <td class="rc-label">${escapeHtml(toFullWidthLabel(row.label))}</td>
+            <td class="rc-num">${numFmt(row.unit)}円</td>
+            <td class="rc-op">×</td>
+            <td class="rc-num">${row.count}回</td>
+            <td class="rc-op">＝</td>
+            <td class="rc-num">${numFmt(row.amount)}円</td>
+          </tr>`
+        )
         .join('');
 
       return `
       <div class="receipt-page">
-        <img class="receipt-logo-img" src="logo.png" alt="KESEN LARUS BASKETBALL CLUB">
-        <div class="receipt-title-bar">
-          <span>${escapeHtml(eraMonth)} 月分</span><span>交通費受領書</span>
+        <div class="rc-header">
+          <div class="rc-arc rc-arc-left"></div>
+          <div class="rc-arc rc-arc-right"></div>
+          <div class="rc-center-line"></div>
+          <img class="rc-logo" src="logo.png" alt="KESEN LARUS BASKETBALL CLUB">
+          <div class="rc-month-circle">
+            <span class="rc-era">令和${reiwaYearOf(y)}年</span>
+            <span class="rc-month"><b>${m}</b>月分</span>
+          </div>
+          <div class="rc-title">交通費受領書</div>
         </div>
-        <table class="receipt-info-table">
-          <tr>
-            <th>名前</th>
-            <td class="receipt-name-cell">${escapeHtml(formatDisplayName(name))}<span class="receipt-seal">印</span></td>
-            <th>連絡先</th>
-            <td>${escapeHtml(phone)}</td>
-          </tr>
-          <tr>
-            <th>住所</th>
-            <td colspan="3">${escapeHtml(address)}</td>
-          </tr>
-        </table>
-        <table class="receipt-amount-table">
-          <tr><th>金額</th><td class="receipt-amount-value">${numFmt(data.total)}</td><td class="receipt-amount-unit">円</td></tr>
-        </table>
-        <table class="receipt-detail-table">
-          <tr>
-            <th rowspan="${data.rows.length + 1}">交通費明細</th>
-            ${rowCells(data.rows[0])}
-          </tr>
-          ${restRowsHtml}
-          <tr class="rc-total-row">
-            <td colspan="5" class="rc-total-label">合計</td>
-            <td class="rc-num">${numFmt(data.total)} 円</td>
-          </tr>
-        </table>
+        <div class="rc-head-rule"></div>
+        <div class="rc-body">
+          <div class="rc-left">
+            <div class="rc-field">
+              <span class="rc-field-label">氏名</span>
+              <span class="rc-field-value">${escapeHtml(formatDisplayName(name))}</span>
+              <span class="rc-seal">印</span>
+            </div>
+            <div class="rc-field">
+              <span class="rc-field-label">連絡先</span>
+              <span class="rc-field-value">${escapeHtml(phone)}</span>
+            </div>
+            <div class="rc-field">
+              <span class="rc-field-label">住所</span>
+              <span class="rc-field-value">${escapeHtml(address)}</span>
+            </div>
+            <div class="rc-amount-box">
+              <span class="rc-amount-tag">金額</span>
+              <span class="rc-amount-value">${numFmt(data.total)}<small>円</small></span>
+            </div>
+          </div>
+          <table class="rc-detail">
+            <thead>
+              <tr><th class="rc-label">区分</th><th class="rc-num">単価</th><th></th><th class="rc-num">回数</th><th></th><th class="rc-num">金額</th></tr>
+            </thead>
+            <tbody>${detailRows}</tbody>
+            <tfoot>
+              <tr><td colspan="3"></td><td class="rc-total-label" colspan="2">合計</td><td class="rc-num">${numFmt(data.total)}円</td></tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="rc-footer">
+          <span>上記の金額を交通費として受領しました。　受領日<span class="rc-date-blank">年</span><span class="rc-date-blank">月</span><span class="rc-date-blank">日</span></span>
+          <span>KESEN LARUS BASKETBALL CLUB</span>
+        </div>
       </div>`;
     })
     .join('');
+  fitReceiptFieldText();
+}
+
+/* 住所などが長い場合は1行に収まるまで文字を縮小する（非表示のままだと幅が測れないため一時的に表示） */
+function fitReceiptFieldText() {
+  const area = document.getElementById('receipt-print-area');
+  const prevDisplay = area.style.display;
+  area.style.display = 'block';
+  area.querySelectorAll('.rc-field-value').forEach((el) => {
+    el.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth && size > 8) {
+      size -= 0.5;
+      el.style.fontSize = size + 'px';
+    }
+  });
+  area.style.display = prevDisplay;
 }
 
 /* ============================================================
@@ -958,7 +997,7 @@ function handleReceiptPdfClick() {
     return;
   }
   renderReceiptPrintArea(month, contacts, names);
-  window.print();
+  printWithPageSize('297mm 210mm');
 }
 
 /* ============================================================
@@ -1022,11 +1061,11 @@ function renderEnvelopePrintArea(entries, period) {
     .join('');
 }
 
-/* 封筒は120x235mmの長形3号だが、受領書PDF(A4想定)と@pageサイズが競合するため、
+/* 封筒(長形3号)と受領書(A4横)で必要な用紙サイズが異なるため、
  * 印刷直前だけ動的にスタイルを差し込み、印刷後に取り除く */
-function printWithEnvelopePageSize() {
+function printWithPageSize(sizeCss) {
   const style = document.createElement('style');
-  style.textContent = '@page { size: 120mm 235mm; margin: 0; }';
+  style.textContent = `@page { size: ${sizeCss}; margin: 0; }`;
   document.head.appendChild(style);
   const cleanup = () => {
     style.remove();
@@ -1035,6 +1074,10 @@ function printWithEnvelopePageSize() {
   window.addEventListener('afterprint', cleanup);
   setTimeout(cleanup, 60000);
   window.print();
+}
+
+function printWithEnvelopePageSize() {
+  printWithPageSize('120mm 235mm');
 }
 
 function handleEnvelopePrintClick() {
