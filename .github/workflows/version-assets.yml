@@ -3,6 +3,7 @@ name: Version static assets
 on:
   push:
     branches:
+      - main
       - claude/larus-commute-allowance-app-w82ee2
 
 permissions:

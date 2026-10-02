@@ -86,4 +86,4 @@ npx esbuild firebase-entry.js --bundle --format=iife --platform=browser --minify
 
 ## キャッシュ対策（アセットのバージョニング）
 
-`.github/workflows/version-assets.yml` により、このブランチへのpushのたびにGitHub Actionsが自動的に `index.html` 内の `app.js` / `style.css` / `xlsx-writer.js` / `firebase-bundle.js` の読み込みURLへ `?v=YYYYMMDDHHMMSS`（UTC・push時刻）を付与するコミットを追加します。これにより、コード更新後にブラウザの古いキャッシュが表示され続ける問題を軽減します。GitHub Pagesの設定変更は不要です（Deploy from a branch のまま動作します）。
+`.github/workflows/version-assets.yml` により、`main` ブランチへのpushのたびにGitHub Actionsが自動的に `index.html` 内の `app.js` / `style.css` / `xlsx-writer.js` / `firebase-bundle.js` の読み込みURLへ `?v=YYYYMMDDHHMMSS`（UTC・push時刻）を付与するコミットを追加します。これにより、コード更新後にブラウザの古いキャッシュが表示され続ける問題を軽減します。GitHub Pagesの設定変更は不要です（Deploy from a branch のまま動作します）。
