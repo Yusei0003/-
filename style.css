@@ -560,6 +560,10 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   text-align: center;
   line-height: 1.25;
   width: 100%;
+  /* ラベルが1行か2行かで棒の下端がずれないよう、常に2行分の高さを確保する */
+  height: 2.5em;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .chart-table-wrap { margin: 14px 0 4px; overflow-x: auto; }
