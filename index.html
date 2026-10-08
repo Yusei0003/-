@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>交通費・謝礼金 取りまとめ | KESEN LARUS BASKETBALL CLUB</title>
+<title>交通費 取りまとめ | KESEN LARUS BASKETBALL CLUB</title>
 <link rel="icon" type="image/png" href="icon.png?v=20261002001306">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=20261002001306">
 <link rel="stylesheet" href="style.css?v=20261002001306">
@@ -11,7 +11,7 @@
 <body class="auth-locked">
 <div id="login-overlay" class="login-overlay">
   <form id="login-form" class="login-form">
-    <h2>交通費・謝礼金 取りまとめ</h2>
+    <h2>交通費 取りまとめ</h2>
     <p class="login-hint">合言葉を入力してください</p>
     <input type="password" id="login-pin" placeholder="合言葉" autocomplete="current-password" autofocus>
     <button type="submit" class="btn-primary">ログイン</button>
@@ -21,8 +21,10 @@
 </div>
 
 <header class="app-header">
-  <h1>交通費・謝礼金 取りまとめ</h1>
-  <p class="subtitle">KESEN LARUS BASKETBALL CLUB 交通費等及び謝礼金支給規程 対応</p>
+  <div class="app-header-text">
+    <h1>交通費 取りまとめ</h1>
+    <p class="subtitle">KESEN LARUS BASKETBALL CLUB　交通費等及び謝礼金支給規程（第3条・第4条）対応</p>
+  </div>
   <button type="button" id="btn-logout" class="logout-btn">ログアウト</button>
 </header>
 
@@ -83,15 +85,19 @@
 
       <div class="calendar-picker">
         <div class="calendar-header">
-          <button type="button" id="cal-prev" class="btn-secondary">＜</button>
+          <button type="button" id="cal-prev" class="btn-secondary cal-nav" aria-label="前の月">＜</button>
           <span id="cal-label" class="calendar-label"></span>
-          <button type="button" id="cal-next" class="btn-secondary">＞</button>
-          <button type="button" id="cal-clear" class="btn-secondary calendar-clear">選択をクリア</button>
+          <button type="button" id="cal-next" class="btn-secondary cal-nav" aria-label="次の月">＞</button>
         </div>
+        <p id="cal-placeholder-note" class="cal-placeholder-note" hidden></p>
         <div class="calendar-weekdays">
           <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
         </div>
         <div id="cal-grid" class="calendar-grid"></div>
+        <div class="cal-selection-row">
+          <span id="cal-selection-summary" class="cal-selection-summary"></span>
+          <button type="button" id="cal-clear" class="btn-secondary calendar-clear">選択をクリア</button>
+        </div>
       </div>
 
       <label class="field-group note-field">
@@ -99,7 +105,7 @@
         <input type="text" id="f-note" placeholder="必要な場合のみ">
       </label>
 
-      <button type="submit" class="btn-primary">登録する（<span id="f-select-count">0</span>日）</button>
+      <button type="submit" id="f-submit" class="btn-primary">登録する（<span id="f-select-count">0</span>日）</button>
     </form>
   </section>
 
@@ -118,10 +124,10 @@
       </div>
     </div>
     <div class="table-wrap">
-      <table class="sheet-table">
+      <table class="sheet-table list-table">
         <thead>
           <tr>
-            <th>日付</th><th>氏名</th><th>区分</th><th>内容</th><th>支給額</th><th>備考</th><th></th>
+            <th>日付</th><th>氏名</th><th>区分</th><th>内容</th><th class="num">支給額</th><th>備考</th><th></th>
           </tr>
         </thead>
         <tbody id="list-tbody"></tbody>
@@ -144,14 +150,16 @@
     </div>
     <div class="table-wrap">
       <table class="sheet-table">
-        <thead><tr><th>氏名</th><th>月間支給額</th><th>稼働率</th></tr></thead>
+        <thead><tr><th>氏名</th><th class="num">月間支給額</th><th class="num">稼働率</th></tr></thead>
         <tbody id="summary-tbody"></tbody>
       </table>
     </div>
+    <p id="summary-placeholder-note" class="summary-note" hidden>※ 月別の回数から取り込んだ記録（日付が仮のもの）は、支給額には含めていますが、活動日数・稼働率の計算には含めていません。</p>
 
     <div class="summary-action-row">
       <button type="button" id="btn-receipt-pdf" class="btn-primary receipt-pdf-btn">領収書をPDF出力（対象月・印刷ダイアログでPDF保存）</button>
       <button type="button" id="btn-sashikomi-export" class="btn-secondary sashikomi-btn">差込データをExcel出力（全期間）</button>
+      <button type="button" id="btn-backup-export" class="btn-secondary sashikomi-btn">全データをバックアップ（CSV）</button>
     </div>
 
     <details class="contact-settings">
@@ -171,14 +179,14 @@
     </details>
 
     <details class="contact-settings">
-      <summary>領収書用の連絡先・住所を設定（この端末にのみ保存されます）</summary>
+      <summary>領収書用の連絡先・住所を設定（全端末で共有されます）</summary>
       <div class="contact-settings-body" id="contact-settings-body"></div>
     </details>
 
     <details class="contact-settings">
       <summary>過去データをインポート（CSV）</summary>
       <div class="import-body">
-        <p class="import-hint">日付・氏名・区分などの列を持つCSVファイルを選ぶと、この端末のデータに追加されます（同じ内容の記録は重複登録されません）。</p>
+        <p class="import-hint">日付・氏名・区分などの列を持つCSVファイルを選ぶと、記録に追加されます（同じ内容の記録は重複登録されません）。「全データをバックアップ（CSV）」で保存したファイルも、ここからそのまま復元できます。</p>
         <input type="file" id="import-file" accept=".csv,text/csv">
         <div id="import-result" class="import-result"></div>
       </div>
@@ -208,17 +216,19 @@
       <div class="chart-card">
         <h3 class="chart-title">月別費用推移</h3>
         <div class="chart-bars" id="dash-monthly-chart"></div>
-        <div class="chart-table-wrap">
-          <table class="sheet-table chart-table">
-            <thead><tr><th>月</th><th>費用</th></tr></thead>
-            <tbody id="dash-monthly-table"></tbody>
-          </table>
-        </div>
+        <details class="chart-table-details">
+          <summary>月ごとの金額を表で見る</summary>
+          <div class="chart-table-wrap">
+            <table class="sheet-table chart-table">
+              <thead><tr><th>月</th><th>費用</th></tr></thead>
+              <tbody id="dash-monthly-table"></tbody>
+            </table>
+          </div>
+        </details>
       </div>
 
       <div class="chart-card">
         <h3 class="chart-title">活動区分別 費用内訳</h3>
-        <div class="chart-legend" id="dash-category-legend"></div>
         <div class="chart-bars chart-bars-compact" id="dash-category-chart"></div>
         <div class="chart-table-wrap">
           <table class="sheet-table chart-table">
@@ -230,7 +240,6 @@
 
       <div class="chart-card full-width">
         <h3 class="chart-title">対象者別 年間稼働状況</h3>
-        <div class="chart-legend" id="dash-staff-legend"></div>
         <div class="chart-bars chart-bars-compact" id="dash-staff-chart"></div>
         <div class="chart-table-wrap">
           <table class="sheet-table chart-table">

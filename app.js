@@ -57,12 +57,13 @@ function addRecord(record) {
 }
 
 function persist() {
-  if (pendingRecords.length === 0) return;
+  if (pendingRecords.length === 0) return Promise.resolve();
   const batch = pendingRecords;
   pendingRecords = [];
-  window.FirebaseData.addRecords(batch).catch((err) => {
+  return window.FirebaseData.addRecords(batch).catch((err) => {
     console.error('addRecords failed', err);
     alert('登録に失敗しました: ' + err.message);
+    throw err;
   });
 }
 
@@ -84,11 +85,25 @@ function loadContacts() {
   return contactsCache;
 }
 
+let saveContactsTimer = null;
+
 function saveContacts(contacts) {
+  clearTimeout(saveContactsTimer);
+  saveContactsTimer = null;
   window.FirebaseData.saveContacts(contacts).catch((err) => {
     console.error('saveContacts failed', err);
     alert('連絡先の保存に失敗しました: ' + err.message);
   });
+}
+
+/* 1文字ごとに書き込むと保存の順序が前後して古い内容に戻ることがあるため、入力が止まってからまとめて保存する */
+function scheduleSaveContacts() {
+  clearTimeout(saveContactsTimer);
+  saveContactsTimer = setTimeout(() => saveContacts(contactsCache), 800);
+}
+
+function flushSaveContacts() {
+  if (saveContactsTimer) saveContacts(contactsCache);
 }
 
 function yen(n) {
@@ -97,6 +112,31 @@ function yen(n) {
 
 function monthKey(dateStr) {
   return (dateStr || '').slice(0, 7); // YYYY-MM
+}
+
+/* 世界標準時で日付を作ると日本時間の0〜9時に前日扱いになるため、日付は必ず端末の現地時刻で作る */
+function localDateStr(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(mk) {
+  const [y, m] = mk.split('-').map(Number);
+  return `${y}年${m}月`;
+}
+
+const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+
+function formatListDate(dateStr, withYear) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const w = WEEKDAY_LABELS[new Date(y, m - 1, d).getDay()];
+  return `${withYear ? y + '/' : ''}${m}/${d}（${w}）`;
+}
+
+/* 月別の回数から取り込んだ記録は日付が仮のため、活動日・稼働率やカレンダーの登録済み判定には使わない */
+const PLACEHOLDER_NOTE = '月別回数取込（仮の日付）';
+
+function isPlaceholderDate(r) {
+  return r.placeholderDate === true || r.note === PLACEHOLDER_NOTE;
 }
 
 function categoryLabel(c) {
@@ -164,8 +204,11 @@ function initForm() {
   updateConditionalFields();
   updateUnitAmount();
 
+  let saving = false;
+  const submitBtn = document.getElementById('f-submit');
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (saving) return;
     if (selectedDates.size === 0) {
       alert('参加した日を1日以上選択してください');
       return;
@@ -186,12 +229,21 @@ function initForm() {
     dates.forEach((date) => {
       addRecord({ date, name, category, role, location, duration, amount, note });
     });
-    persist();
 
-    selectedDates.clear();
-    renderCalendar();
-    document.getElementById('f-note').value = '';
-    showToast(`${dates.length}日分を登録しました`);
+    saving = true;
+    submitBtn.disabled = true;
+    persist()
+      .then(() => {
+        selectedDates.clear();
+        renderCalendar();
+        document.getElementById('f-note').value = '';
+        showToast(`${dates.length}日分を登録しました`);
+      })
+      .catch(() => {})
+      .finally(() => {
+        saving = false;
+        submitBtn.disabled = false;
+      });
   });
 }
 
@@ -201,7 +253,7 @@ function applyDefaultRole() {
 }
 
 function isDateRegisteredForName(name, date) {
-  return records.some((r) => r.name === name && r.date === date);
+  return records.some((r) => r.name === name && r.date === date && !isPlaceholderDate(r));
 }
 
 function pruneSelectedDatesForName() {
@@ -225,6 +277,24 @@ function updateUnitAmount() {
   const duration = document.getElementById('f-duration').value;
   const amount = calcUnitAmount(category, { role, location, duration });
   document.getElementById('f-unit-amount').textContent = yen(amount) + ' / 日';
+  updateSelectionSummary();
+}
+
+function updateSelectionSummary() {
+  const n = selectedDates.size;
+  document.getElementById('f-select-count').textContent = n;
+  const el = document.getElementById('cal-selection-summary');
+  if (n === 0) {
+    el.textContent = '参加した日をタップして選んでください';
+    return;
+  }
+  const category = document.getElementById('f-category').value;
+  const unit = calcUnitAmount(category, {
+    role: document.getElementById('f-role').value,
+    location: document.getElementById('f-location').value,
+    duration: document.getElementById('f-duration').value,
+  });
+  el.innerHTML = `<strong>${n}日</strong>を選択中　${yen(unit)} × ${n}日 ＝ <strong>${yen(unit * n)}</strong>`;
 }
 
 /* ============================================================
@@ -344,7 +414,7 @@ function shiftCalendarMonth(delta) {
 
 function renderCalendar() {
   document.getElementById('cal-label').textContent = `${calYear}年${calMonth}月`;
-  document.getElementById('f-select-count').textContent = selectedDates.size;
+  updateSelectionSummary();
 
   const grid = document.getElementById('cal-grid');
   const firstWeekday = new Date(calYear, calMonth - 1, 1).getDay();
@@ -355,13 +425,20 @@ function renderCalendar() {
     html += '<span class="cal-day cal-day-empty"></span>';
   }
   const name = document.getElementById('f-name').value;
+  const monthPrefix = `${calYear}-${String(calMonth).padStart(2, '0')}`;
+  const placeholderCount = records.filter((r) => r.name === name && monthKey(r.date) === monthPrefix && isPlaceholderDate(r)).length;
+  const placeholderNote = document.getElementById('cal-placeholder-note');
+  placeholderNote.hidden = placeholderCount === 0;
+  placeholderNote.textContent = placeholderCount
+    ? `この月は「月別の回数から一括インポート」で取り込んだ記録が${placeholderCount}件あります（日付は仮）。同じ活動を二重に登録しないようご注意ください。`
+    : '';
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const selected = selectedDates.has(dateStr);
     const weekday = new Date(calYear, calMonth - 1, d).getDay();
     const holidayName = getHolidayName(dateStr);
-    const registeredRecords = records.filter((r) => r.name === name && r.date === dateStr);
+    const registeredRecords = records.filter((r) => r.name === name && r.date === dateStr && !isPlaceholderDate(r));
     const isRegistered = registeredRecords.length > 0;
 
     const classes = ['cal-day'];
@@ -397,7 +474,7 @@ function renderCalendar() {
         selectedDates.add(date);
         btn.classList.add('selected');
       }
-      document.getElementById('f-select-count').textContent = selectedDates.size;
+      updateSelectionSummary();
     });
   });
 }
@@ -411,7 +488,7 @@ function renderList() {
   let monthFilter = document.getElementById('list-month-filter').value;
   if (!listMonthFilterTouched) {
     const months = [...new Set(records.map((r) => monthKey(r.date)))].sort().reverse();
-    monthFilter = months[0] || monthKey(new Date().toISOString());
+    monthFilter = months[0] || monthKey(localDateStr());
   }
   const nameFilter = document.getElementById('list-name-filter').value.trim();
 
@@ -426,15 +503,18 @@ function renderList() {
   let total = 0;
   filtered.forEach((r) => {
     total += Number(r.amount) || 0;
+    const dateLabel = isPlaceholderDate(r)
+      ? `${Number(r.date.slice(5, 7))}月分（日付不明）`
+      : formatListDate(r.date, !monthFilter);
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${escapeHtml(r.date)}</td>
-      <td>${escapeHtml(r.name)}</td>
-      <td>${escapeHtml(categoryLabel(r.category))}</td>
-      <td>${escapeHtml(describeEntry(r))}</td>
-      <td class="num"><input type="number" class="amount-edit" value="${r.amount}" data-id="${r.id}" step="1"></td>
-      <td>${escapeHtml(r.note || '')}</td>
-      <td><button class="btn-danger" data-del="${r.id}">削除</button></td>
+      <td class="col-date" data-label="日付">${escapeHtml(dateLabel)}</td>
+      <td class="col-name" data-label="氏名">${escapeHtml(r.name)}</td>
+      <td class="col-category" data-label="区分">${escapeHtml(categoryLabel(r.category))}</td>
+      <td class="col-detail" data-label="内容">${escapeHtml(describeEntry(r))}</td>
+      <td class="num col-amount" data-label="支給額"><input type="number" class="amount-edit" value="${escapeHtml(r.amount)}" data-id="${escapeHtml(r.id)}" data-prev="${escapeHtml(r.amount)}" min="0" step="1" inputmode="numeric"></td>
+      <td class="col-note" data-label="備考">${escapeHtml(r.note || '')}</td>
+      <td class="col-actions"><button type="button" class="btn-delete" data-del="${escapeHtml(r.id)}">削除</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -444,7 +524,13 @@ function renderList() {
 
   tbody.querySelectorAll('.amount-edit').forEach((input) => {
     input.addEventListener('change', () => {
-      updateRecord(input.dataset.id, { amount: Number(input.value) || 0 });
+      const value = Number(input.value) || 0;
+      if (value < 0) {
+        input.value = input.dataset.prev;
+        showToast('マイナスの金額は入力できません');
+        return;
+      }
+      updateRecord(input.dataset.id, { amount: value });
       renderList();
     });
   });
@@ -461,12 +547,12 @@ function renderList() {
 }
 
 function populateMonthOptions(selectId, current, includeAllOption) {
-  const thisMonth = monthKey(new Date().toISOString());
+  const thisMonth = monthKey(localDateStr());
   const months = [...new Set([...records.map((r) => monthKey(r.date)), thisMonth].filter(Boolean))].sort().reverse();
   const sel = document.getElementById(selectId);
   const keep = current || sel.value;
   const allOption = includeAllOption ? '<option value="">すべての月</option>' : '';
-  sel.innerHTML = allOption + months.map((m) => `<option value="${m}">${m}</option>`).join('');
+  sel.innerHTML = allOption + months.map((m) => `<option value="${m}">${formatMonthLabel(m)}</option>`).join('');
   sel.value = keep || (includeAllOption ? '' : thisMonth);
 }
 
@@ -482,7 +568,7 @@ function initList() {
  * 月次集計
  * ============================================================ */
 function computeActivityStats(month) {
-  const filtered = records.filter((r) => monthKey(r.date) === month);
+  const filtered = records.filter((r) => monthKey(r.date) === month && !isPlaceholderDate(r));
   const activeDays = new Set(filtered.map((r) => r.date));
   const daysByName = new Map(STAFF_NAMES.map((n) => [n, new Set()]));
   filtered.forEach((r) => {
@@ -526,6 +612,8 @@ function renderSummary() {
 
   const payDate = nextPaymentDate(month);
   document.getElementById('summary-paydate').textContent = payDate;
+
+  document.getElementById('summary-placeholder-note').hidden = !filtered.some(isPlaceholderDate);
 }
 
 function nextPaymentDate(monthKeyStr) {
@@ -541,6 +629,7 @@ function initSummary() {
   initContactSettings();
   document.getElementById('btn-receipt-pdf').addEventListener('click', handleReceiptPdfClick);
   document.getElementById('btn-sashikomi-export').addEventListener('click', handleSashikomiExportClick);
+  document.getElementById('btn-backup-export').addEventListener('click', handleBackupExportClick);
   initImport();
   initMonthlyCountImport();
   initEnvelope();
@@ -695,12 +784,10 @@ function handleMonthlyCountImportCsv(text) {
         duplicated++;
         return;
       }
-      addRecord({ date, name, category: e.category, role: e.role, location: e.location, duration: e.duration, amount: e.amount, note: '月別回数取込（仮の日付）' });
+      addRecord({ date, name, category: e.category, role: e.role, location: e.location, duration: e.duration, amount: e.amount, note: PLACEHOLDER_NOTE, placeholderDate: true });
       added++;
     });
   });
-
-  persist();
 
   const resultLines = [`${added}件を追加しました`];
   if (duplicated > 0) resultLines.push(`（重複のためスキップ: ${duplicated}件）`);
@@ -710,8 +797,15 @@ function handleMonthlyCountImportCsv(text) {
     const more = mismatchLines.length > 5 ? ` 他${mismatchLines.length - 5}件` : '';
     resultLines.push(`（金額不一致: ${shown}${more}）`);
   }
-  resultEl.textContent = resultLines.join(' ');
-  showToast(`${added}件をインポートしました`);
+  resultEl.textContent = '保存中...';
+  persist()
+    .then(() => {
+      resultEl.textContent = resultLines.join(' ');
+      showToast(`${added}件をインポートしました`);
+    })
+    .catch(() => {
+      resultEl.textContent = '保存に失敗したため、取り込めませんでした。通信状態を確認してもう一度お試しください';
+    });
 }
 
 function handleImportCsv(text) {
@@ -767,17 +861,23 @@ function handleImportCsv(text) {
     added++;
   });
 
-  persist();
-
   const resultLines = [`${added}件を追加しました`];
   if (duplicated > 0) resultLines.push(`（重複のためスキップ: ${duplicated}件）`);
   if (invalid > 0) resultLines.push(`（形式不正のためスキップ: ${invalid}件）`);
-  document.getElementById('import-result').textContent = resultLines.join(' ');
-  showToast(`${added}件をインポートしました`);
+  const resultEl = document.getElementById('import-result');
+  resultEl.textContent = '保存中...';
+  persist()
+    .then(() => {
+      resultEl.textContent = resultLines.join(' ');
+      showToast(`${added}件をインポートしました`);
+    })
+    .catch(() => {
+      resultEl.textContent = '保存に失敗したため、取り込めませんでした。通信状態を確認してもう一度お試しください';
+    });
 }
 
 /* ============================================================
- * 連絡先設定（この端末のlocalStorageにのみ保存。リポジトリには含めない）
+ * 連絡先設定（Firestoreに保存され、ログインした全端末で共有される）
  * ============================================================ */
 function initContactSettings() {
   const body = document.getElementById('contact-settings-body');
@@ -802,8 +902,9 @@ function initContactSettings() {
     input.addEventListener('input', () => {
       const target = field === 'address' ? contactsCache.addresses : contactsCache.phones;
       target[name] = input.value;
-      saveContacts(contactsCache);
+      scheduleSaveContacts();
     });
+    input.addEventListener('blur', flushSaveContacts);
   });
 
   refreshContactInputs();
@@ -838,14 +939,16 @@ function numFmt(n) {
 
 function buildReceiptData(name, month) {
   const monthRecords = records.filter((r) => r.name === name && monthKey(r.date) === month);
+  let actualTotal = 0;
   const rows = RECEIPT_ROWS.map((rowDef) => {
     const matches = monthRecords.filter(rowDef.match);
     const count = matches.length;
-    const amount = matches.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-    return { label: rowDef.label, unit: rowDef.unit, count, amount };
+    actualTotal += matches.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    return { label: rowDef.label, unit: rowDef.unit, count, amount: rowDef.unit * count };
   });
-  const total = rows.reduce((sum, row) => sum + row.amount, 0);
-  return { name, rows, total };
+  const standardTotal = rows.reduce((sum, row) => sum + row.amount, 0);
+  /* 一覧で支給額を手直しした分は各行に混ぜず「調整額」として分け、単価×回数の式が必ず合うようにする */
+  return { name, rows, total: actualTotal, adjustment: actualTotal - standardTotal };
 }
 
 function toFullWidthLabel(label) {
@@ -875,6 +978,14 @@ function renderReceiptPrintArea(month, contacts, names) {
           </tr>`
         )
         .join('');
+      const adjustmentRow = data.adjustment
+        ? `
+          <tr class="rc-adjust">
+            <td class="rc-label">調整額</td>
+            <td colspan="4"></td>
+            <td class="rc-num">${data.adjustment > 0 ? '+' : '−'}${numFmt(Math.abs(data.adjustment))}円</td>
+          </tr>`
+        : '';
 
       return `
       <div class="receipt-page">
@@ -910,11 +1021,11 @@ function renderReceiptPrintArea(month, contacts, names) {
               <span class="rc-amount-value">${numFmt(data.total)}<small>円</small></span>
             </div>
           </div>
-          <table class="rc-detail">
+          <table class="rc-detail${data.adjustment ? ' rc-has-adjust' : ''}">
             <thead>
               <tr><th class="rc-label">区分</th><th class="rc-num">単価</th><th></th><th class="rc-num">回数</th><th></th><th class="rc-num">金額</th></tr>
             </thead>
-            <tbody>${detailRows}</tbody>
+            <tbody>${detailRows}${adjustmentRow}</tbody>
             <tfoot>
               <tr><td colspan="3"></td><td class="rc-total-label" colspan="2">合計</td><td class="rc-num">${numFmt(data.total)}円</td></tr>
             </tfoot>
@@ -980,8 +1091,31 @@ function handleSashikomiExportClick() {
   }
   const rows = buildSashikomiRows();
   const bytes = buildXlsxFile('差込', SASHIKOMI_HEADER, rows);
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const today = localDateStr().replace(/-/g, '');
   downloadBytes(bytes, `交通費_差込データ_${today}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
+/* ============================================================
+ * 全データのバックアップ（「過去データをインポート（CSV）」でそのまま復元できる形式）
+ * ============================================================ */
+const BACKUP_COLUMNS = ['date', 'name', 'category', 'role', 'location', 'duration', 'amount', 'note'];
+
+function csvCell(v) {
+  const s = String(v ?? '');
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function handleBackupExportClick() {
+  if (records.length === 0) {
+    alert('バックアップできる記録がありません');
+    return;
+  }
+  const sorted = [...records].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.name.localeCompare(b.name, 'ja')));
+  const lines = [BACKUP_COLUMNS.join(','), ...sorted.map((r) => BACKUP_COLUMNS.map((k) => csvCell(r[k])).join(','))];
+  const bytes = new TextEncoder().encode('\ufeff' + lines.join('\r\n') + '\r\n');
+  const today = localDateStr().replace(/-/g, '');
+  downloadBytes(bytes, `交通費_全データバックアップ_${today}.csv`, 'text/csv');
+  showToast(`${records.length}件をバックアップしました`);
 }
 
 function handleReceiptPdfClick() {
@@ -1126,8 +1260,6 @@ function showToast(msg) {
 /* ============================================================
  * ダッシュボード
  * ============================================================ */
-const CATEGORY_CHART_COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)', 'var(--series-6)'];
-const STAFF_CHART_COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)'];
 const FISCAL_MONTH_LABELS = ['4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '1月', '2月', '3月'];
 
 /* 年度は4月始まり(その年の4月〜翌年3月)。fiscalYearOfは年度の開始年(西暦)を返す */
@@ -1149,7 +1281,7 @@ function fiscalYearLabel(fy) {
 
 function getFiscalYearsWithData() {
   const years = new Set(records.map((r) => fiscalYearOf(r.date)));
-  years.add(fiscalYearOf(new Date().toISOString().slice(0, 10)));
+  years.add(fiscalYearOf(localDateStr()));
   return [...years].sort((a, b) => b - a);
 }
 
@@ -1161,7 +1293,8 @@ function computeAnnualData(fiscalYear) {
     monthly[fiscalMonthIndex(r.date)] += Number(r.amount) || 0;
   });
   const total = monthly.reduce((a, b) => a + b, 0);
-  const activeDays = new Set(yearRecords.map((r) => r.date)).size;
+  const datedRecords = yearRecords.filter((r) => !isPlaceholderDate(r));
+  const activeDays = new Set(datedRecords.map((r) => r.date)).size;
 
   const categories = RECEIPT_ROWS.map((rowDef) => ({
     label: rowDef.label,
@@ -1171,7 +1304,7 @@ function computeAnnualData(fiscalYear) {
   const daysByName = new Map(STAFF_NAMES.map((n) => [n, new Set()]));
   const amountByName = new Map(STAFF_NAMES.map((n) => [n, 0]));
   yearRecords.forEach((r) => {
-    daysByName.get(r.name)?.add(r.date);
+    if (!isPlaceholderDate(r)) daysByName.get(r.name)?.add(r.date);
     amountByName.set(r.name, (amountByName.get(r.name) || 0) + (Number(r.amount) || 0));
   });
   const staff = STAFF_NAMES.map((name) => {
@@ -1195,7 +1328,7 @@ function initDashboard() {
 function renderDashboard() {
   const yearSel = document.getElementById('dash-year');
   const years = getFiscalYearsWithData();
-  const keep = yearSel.value ? Number(yearSel.value) : fiscalYearOf(new Date().toISOString().slice(0, 10));
+  const keep = yearSel.value ? Number(yearSel.value) : fiscalYearOf(localDateStr());
   yearSel.innerHTML = years.map((y) => `<option value="${y}">${escapeHtml(fiscalYearLabel(y))}</option>`).join('');
   yearSel.value = years.includes(keep) ? keep : years[0];
 
@@ -1284,15 +1417,8 @@ function renderCategoryChart(data) {
   renderBarChart(
     'dash-category-chart',
     data.categories.map((c) => ({ label: c.label, value: c.total })),
-    CATEGORY_CHART_COLORS
+    ['var(--primary)']
   );
-
-  document.getElementById('dash-category-legend').innerHTML = data.categories
-    .map(
-      (c, i) =>
-        `<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:${CATEGORY_CHART_COLORS[i]}"></span>${escapeHtml(c.label)}</span>`
-    )
-    .join('');
 
   document.getElementById('dash-category-table').innerHTML = data.categories
     .map((c) => {
@@ -1306,15 +1432,8 @@ function renderStaffChart(data) {
   renderBarChart(
     'dash-staff-chart',
     data.staff.map((s) => ({ label: s.name, value: s.amount })),
-    STAFF_CHART_COLORS
+    ['var(--primary)']
   );
-
-  document.getElementById('dash-staff-legend').innerHTML = data.staff
-    .map(
-      (s, i) =>
-        `<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:${STAFF_CHART_COLORS[i]}"></span>${escapeHtml(s.name)}</span>`
-    )
-    .join('');
 
   document.getElementById('dash-staff-table').innerHTML = data.staff
     .map(

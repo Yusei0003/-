@@ -44,13 +44,17 @@ body {
   box-shadow: var(--shadow-md);
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
+.app-header-text { min-width: 0; }
 .app-header h1 { margin: 0 0 4px; font-size: 1.45rem; letter-spacing: 0.02em; }
 .app-header .subtitle { margin: 0; font-size: 0.85rem; opacity: 0.9; }
 .logout-btn {
-  position: absolute;
-  top: 22px;
-  right: 24px;
+  flex-shrink: 0;
+  white-space: nowrap;
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.4);
   color: #fff;
@@ -103,11 +107,16 @@ body.auth-locked .login-overlay {
 .tabs {
   display: flex;
   gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
   padding: 14px 24px 0;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
+.tabs::-webkit-scrollbar { display: none; }
 .tab-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
   border: none;
   background: transparent;
   padding: 10px 20px;
@@ -202,7 +211,29 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   min-width: 110px;
   text-align: center;
 }
-.calendar-clear { margin-left: auto; }
+.cal-nav { padding: 6px 14px; }
+.calendar-clear { margin-left: auto; white-space: nowrap; }
+.cal-placeholder-note {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fff7e6;
+  border: 1px solid #f5d38a;
+  color: #8a5a00;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.cal-selection-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.cal-selection-summary { font-size: 0.9rem; color: var(--muted); }
+.cal-selection-summary strong { color: var(--primary-dark); font-variant-numeric: tabular-nums; }
 .calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -285,6 +316,7 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   box-shadow: var(--shadow-sm);
 }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.btn-primary:disabled { opacity: 0.6; cursor: wait; transform: none; }
 .btn-secondary {
   background: #fff;
   border: 1px solid var(--primary);
@@ -297,6 +329,17 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   color: var(--danger);
 }
 .btn-danger:hover { background: #fbc9d5; }
+.btn-delete {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.btn-delete:hover { color: var(--danger); border-color: #f6b3c4; background: #fff5f7; }
 
 .filter-bar {
   display: flex;
@@ -352,7 +395,9 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   top: 0;
 }
 .sheet-table tbody tr:hover { background: #f3fafd; }
-.sheet-table td.num, .sheet-table th:nth-child(2) { text-align: right; }
+.sheet-table td.num, .sheet-table th.num { text-align: right; }
+.sheet-table td { font-variant-numeric: tabular-nums; }
+.summary-note { margin: 10px 2px 0; font-size: 0.78rem; color: var(--muted); }
 
 .amount-edit {
   width: 90px;
@@ -448,7 +493,7 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
 
 .dash-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
   gap: 18px;
 }
 .chart-card {
@@ -518,6 +563,9 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
 }
 
 .chart-table-wrap { margin: 14px 0 4px; overflow-x: auto; }
+.chart-table-details { margin: 12px 0 8px; }
+.chart-table-details summary { cursor: pointer; font-size: 0.8rem; color: var(--muted); padding: 4px 0; }
+.chart-table-details .chart-table-wrap { margin-top: 6px; }
 .chart-table { font-size: 0.82rem; }
 .chart-table th, .chart-table td { padding: 6px 10px; white-space: nowrap; }
 .chart-table td.num, .chart-table th:nth-child(2), .chart-table th:nth-child(3), .chart-table th:nth-child(4) { text-align: right; }
@@ -723,6 +771,8 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
 .rc-detail .rc-op { width: 7mm; text-align: center; color: #555; }
 .rc-detail td.rc-total-label { text-align: center; }
 .rc-zero td, .rc-zero td.rc-op { color: #aaa; }
+.rc-detail.rc-has-adjust tbody td { height: 13.6mm; }
+.rc-detail tbody tr.rc-adjust td { color: #222; }
 
 .rc-footer {
   position: absolute;
@@ -861,4 +911,49 @@ main { max-width: 1000px; margin: 0 auto; padding: 24px; }
   color: #555;
   border-top: 1px solid #ccc;
   padding-top: 10px;
+}
+
+/* ============================================================
+ * 画面幅ごとの調整
+ * ============================================================ */
+@media (min-width: 700px) {
+  .calendar-picker { max-width: 640px; }
+  .cal-day { aspect-ratio: auto; height: 54px; }
+}
+
+@media (max-width: 640px) {
+  .app-header { padding: 16px; align-items: center; }
+  .app-header h1 { font-size: 1.2rem; }
+  .app-header .subtitle { font-size: 0.72rem; line-height: 1.5; }
+  .tabs { padding: 10px 12px 0; }
+  .tab-btn { padding: 10px 14px; font-size: 0.9rem; }
+  main { padding: 16px 12px; }
+  .calendar-picker { padding: 14px 12px; }
+  .calendar-header { gap: 8px; }
+  .filter-stats { margin-left: 0; width: 100%; flex-wrap: wrap; gap: 6px 16px; }
+
+  /* 一覧はスマホでは1件ずつのカード表示にして、支給額の修正と削除を画面内で操作できるようにする */
+  .list-table thead { display: none; }
+  .list-table, .list-table tbody { display: block; }
+  .list-table tr {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "date name amount"
+      "category detail actions"
+      "note note note";
+    align-items: center;
+    gap: 6px 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .list-table td { border: none; padding: 0; white-space: normal; }
+  .list-table .col-date { grid-area: date; font-weight: 700; color: var(--text); }
+  .list-table .col-name { grid-area: name; font-weight: 600; }
+  .list-table .col-amount { grid-area: amount; }
+  .list-table .col-category { grid-area: category; color: var(--muted); font-size: 0.82rem; }
+  .list-table .col-detail { grid-area: detail; color: var(--muted); font-size: 0.82rem; }
+  .list-table .col-actions { grid-area: actions; justify-self: end; }
+  .list-table .col-note { grid-area: note; font-size: 0.8rem; color: var(--muted); }
+  .list-table .col-note:empty { display: none; }
 }
